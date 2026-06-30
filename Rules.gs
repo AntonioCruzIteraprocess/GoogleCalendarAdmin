@@ -1,6 +1,6 @@
 /**
  * Motor de reglas con lógica AND/OR anidada
- * 
+ *
  * Estructura:
  *   rule.conditionGroups = [
  *     { operator: "AND", conditions: [{type, value}, ...] },  ← Grupo 1
@@ -8,17 +8,13 @@
  *   ]
  *   Los grupos entre sí se evalúan con OR.
  *   Dentro de cada grupo se evalúa con el operator del grupo (AND u OR).
- * 
+ *
  * Backward compatible: si rule.conditions existe (formato viejo), funciona como un solo grupo AND.
  */
 
 function findMatchingRule(event, rules) {
   const context = buildEventContext(event);
-
-  return rules.find(rule => {
-    if (!rule.enabled) return false;
-    return evaluateRule(rule, context);
-  });
+  return rules.find(rule => rule.enabled && evaluateRule(rule, context));
 }
 
 function evaluateRule(rule, context) {
@@ -34,18 +30,18 @@ function evaluateRule(rule, context) {
   return groups.some(group => {
     if (!group.conditions || group.conditions.length === 0) return false;
     const op = group.operator || "AND";
-    if (op === "OR") {
-      return group.conditions.some(cond => evaluateCondition(cond, context));
-    }
-    return group.conditions.every(cond => evaluateCondition(cond, context));
+    return op === "OR"
+      ? group.conditions.some(cond => evaluateCondition(cond, context))
+      : group.conditions.every(cond => evaluateCondition(cond, context));
   });
 }
 
 function evaluateCondition(cond, ctx) {
   switch (cond.type) {
-    case "domain":
+    case "domain": {
       const domain = cond.value.toLowerCase().replace(/^@/, "");
       return ctx.emails.some(e => e.endsWith("@" + domain));
+    }
     case "emailContains":
       return ctx.emails.some(e => e.toLowerCase().includes(cond.value.toLowerCase()));
     case "titleContains":
@@ -58,9 +54,10 @@ function evaluateCondition(cond, ctx) {
       return ctx.isAllDay === (cond.value === "true");
     case "minGuests":
       return ctx.guestCount >= parseInt(cond.value);
-    case "creatorDomain":
+    case "creatorDomain": {
       const cd = cond.value.toLowerCase().replace(/^@/, "");
       return ctx.creators.some(e => e.endsWith("@" + cd));
+    }
     default:
       return false;
   }
@@ -68,11 +65,11 @@ function evaluateCondition(cond, ctx) {
 
 function buildEventContext(event) {
   return {
-    emails: getEventEmails(event),
-    creators: event.getCreators().map(e => e.toLowerCase()),
-    title: event.getTitle().toLowerCase(),
+    emails:     getEventEmails(event),
+    creators:   event.getCreators().map(e => e.toLowerCase()),
+    title:      event.getTitle().toLowerCase(),
     description: (event.getDescription() || "").toLowerCase(),
-    isAllDay: event.isAllDayEvent(),
+    isAllDay:   event.isAllDayEvent(),
     guestCount: event.getGuestList().length
   };
 }

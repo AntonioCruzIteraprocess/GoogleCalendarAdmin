@@ -16,9 +16,14 @@ function sendWebhookAlert(event, config) {
       `_Este evento no coincide con ninguna regla configurada._`
   };
 
-  UrlFetchApp.fetch(config.webhookUrl, {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify(payload)
-  });
+  try {
+    UrlFetchApp.fetch(config.webhookUrl, {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+  } catch (e) {
+    Logger.log("Webhook error: " + e.message);
+  }
 }
