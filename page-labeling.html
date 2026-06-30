@@ -1,5 +1,11 @@
 <div id="page-labeling" class="page active">
-  <h1 class="page-title">🏷️ Etiquetado</h1>
+  <div class="page-header">
+    <div>
+      <div class="page-title">🏷️ Etiquetado</div>
+      <div class="page-subtitle">Aplica etiquetas automáticas a los eventos del calendario según reglas configuradas</div>
+    </div>
+  </div>
+
   <div class="tabs">
     <div class="tab active" onclick="switchTab('labeling','ejecutar')">Ejecutar</div>
     <div class="tab" onclick="switchTab('labeling','reglas')">Reglas</div>
@@ -8,16 +14,32 @@
   <!-- Tab: Ejecutar -->
   <div id="labeling-ejecutar" class="tab-panel active">
     <div class="card">
+      <div class="card-title">📅 Por rango de fechas</div>
       <div class="form-row">
         <div><label>Desde</label><input type="date" id="startDate"></div>
         <div><label>Hasta</label><input type="date" id="endDate"></div>
-        <div><label>&nbsp;</label><button class="btn btn-warning" onclick="runByDate()">▶️ Por fecha</button></div>
-      </div>
-      <div class="form-row" style="margin-top:12px;">
-        <div style="flex:3;"><label>Buscar por título</label><input type="text" id="eventQuery" placeholder="Ej: Provident, Daily..."></div>
-        <div><label>&nbsp;</label><button class="btn btn-warning" onclick="runByEvent()">🔍 Buscar</button></div>
+        <div style="flex:0 0 auto; padding-top:1px;">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" onclick="runByDate()">
+            <span>▶</span> Ejecutar
+          </button>
+        </div>
       </div>
     </div>
+
+    <div class="card">
+      <div class="card-title">🔍 Por título de evento</div>
+      <div class="form-row">
+        <div style="flex:3;"><label>Palabra clave</label>
+          <input type="text" id="eventQuery" placeholder="Ej: Provident, Daily, Sprint...">
+        </div>
+        <div style="flex:0 0 auto; padding-top:1px;">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" onclick="runByEvent()">Buscar y etiquetar</button>
+        </div>
+      </div>
+    </div>
+
     <div id="results-container"></div>
     <div id="unmatched-container"></div>
   </div>
@@ -25,16 +47,22 @@
   <!-- Modal: Detalle de evento -->
   <div id="event-detail-modal" class="modal-overlay">
     <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">Detalle del evento</span>
+        <button class="modal-close" onclick="closeEventDetail()">✕</button>
+      </div>
       <div id="event-detail-content"></div>
-      <div style="text-align:right; margin-top:16px;"><button class="btn" style="background:#eee;" onclick="closeEventDetail()">Cerrar</button></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeEventDetail()">Cerrar</button>
+      </div>
     </div>
   </div>
 
   <!-- Tab: Reglas -->
   <div id="labeling-reglas" class="tab-panel">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-      <span style="font-size:14px; color:#666;">Administra las reglas de etiquetado automático</span>
-      <button class="btn btn-primary" onclick="openRuleModal(-1)">+ Nueva regla</button>
+      <span class="text-muted text-sm">Reglas de etiquetado automático por condiciones AND/OR</span>
+      <button class="btn btn-primary btn-sm" onclick="openRuleModal(-1)">＋ Nueva regla</button>
     </div>
     <div id="rules-list"></div>
   </div>

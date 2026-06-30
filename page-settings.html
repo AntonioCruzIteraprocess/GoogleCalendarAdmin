@@ -1,39 +1,56 @@
 <div id="page-settings" class="page">
-  <h1 class="page-title">⚙️ Configuración</h1>
+  <div class="page-header">
+    <div class="page-title">⚙️ Configuración</div>
+  </div>
+
   <div class="tabs">
-    <div class="tab active" onclick="switchTab('settings','etiquetado')">🏷️ Etiquetado</div>
+    <div class="tab active" onclick="switchTab('settings','proyectos')">🗂️ Proyectos</div>
+    <div class="tab" onclick="switchTab('settings','etiquetado')">🏷️ Etiquetado</div>
     <div class="tab" onclick="switchTab('settings','tempo')">⏱️ Tempo</div>
     <div class="tab" onclick="switchTab('settings','planner')">📋 Planificador</div>
     <div class="tab" onclick="switchTab('settings','extractor')">📊 Reporte</div>
   </div>
 
-  <!-- Tab: Etiquetado config -->
-  <div id="settings-etiquetado" class="tab-panel active">
+  <!-- ── Tab: Proyectos ── -->
+  <div id="settings-proyectos" class="tab-panel active">
     <div class="card">
-      <h3 style="margin-bottom:12px;">📅 Calendarios</h3>
-      <p style="font-size:12px; color:#888; margin-bottom:12px;">Selecciona los calendarios donde se aplicarán las reglas y sync</p>
-      <div id="calendars-list"><p style="color:#888; font-size:13px;">Cargando...</p></div>
-    </div>
-
-    <div class="card">
-      <h3 style="margin-bottom:12px;">🔔 Webhook (Google Chat)</h3>
-      <div class="form-group">
-        <div style="display:flex; gap:10px; align-items:center; margin-bottom:8px;">
-          <input type="checkbox" id="webhookEnabled" style="width:18px; height:18px;">
-          <span style="font-size:13px;">Habilitar notificaciones</span>
-        </div>
-        <input type="text" id="webhookUrl" placeholder="https://chat.googleapis.com/v1/spaces/...">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <div class="card-title" style="margin-bottom:0;">🗂️ Proyectos</div>
+        <button class="btn btn-primary btn-sm" onclick="openProjectModal(-1)">＋ Nuevo proyecto</button>
       </div>
+      <p class="card-subtitle">Cada proyecto agrupa credenciales Jira, calendario y configuración. Selecciona el activo desde el selector en el sidebar.</p>
+      <div id="projects-list"></div>
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:12px;">⏰ Ejecución Automática</h3>
+      <div class="card-title">📅 Calendarios disponibles</div>
+      <p class="card-subtitle">Los calendarios donde se aplicarán reglas y sincronizaciones.</p>
+      <div id="calendars-list"><div class="loading-placeholder"><span class="spinner dark"></span> Cargando...</div></div>
+    </div>
 
-      <div style="background:#f8f9fa; border-radius:6px; padding:12px; margin-bottom:12px;">
-        <p style="font-size:13px; font-weight:600; margin-bottom:8px;">📅 Día vencido (recomendado)</p>
-        <p style="font-size:12px; color:#666; margin-bottom:8px;">Etiqueta los eventos del día anterior. Ideal para ejecutar en la madrugada.</p>
+    <div class="card">
+      <div class="card-title">🔔 Webhook Google Chat</div>
+      <div class="checkbox-row form-group">
+        <input type="checkbox" id="webhookEnabled">
+        <label for="webhookEnabled">Habilitar notificaciones de eventos sin etiquetas</label>
+      </div>
+      <input type="text" id="webhookUrl" placeholder="https://chat.googleapis.com/v1/spaces/...">
+    </div>
+
+    <button class="btn btn-success" onclick="saveEtiquetadoSettings()">💾 Guardar</button>
+  </div>
+
+  <!-- ── Tab: Etiquetado ── -->
+  <div id="settings-etiquetado" class="tab-panel">
+    <div class="card">
+      <div class="card-title">⏰ Ejecución automática</div>
+
+      <div style="background:var(--gray-50); border-radius:6px; padding:14px; margin-bottom:12px; border:1px solid var(--gray-200);">
+        <p class="section-title">📅 Día vencido <span class="badge badge-green" style="margin-left:4px;">Recomendado</span></p>
+        <p class="text-sm text-muted" style="margin-bottom:10px;">Etiqueta los eventos del día anterior. Ideal en la madrugada.</p>
         <div class="form-row">
-          <div><label>Hora de ejecución</label>
+          <div>
+            <label>Hora de ejecución</label>
             <select id="labelYesterdayHour">
               <option value="0">12:00 AM</option>
               <option value="1">1:00 AM</option>
@@ -44,26 +61,28 @@
               <option value="6">6:00 AM</option>
               <option value="7" selected>7:00 AM</option>
               <option value="8">8:00 AM</option>
-              <option value="9">9:00 AM</option>
               <option value="20">8:00 PM</option>
               <option value="21">9:00 PM</option>
               <option value="22">10:00 PM</option>
               <option value="23">11:00 PM</option>
             </select>
           </div>
-          <div><label>&nbsp;</label><button class="btn btn-success" onclick="createLabelYesterdayTriggerUI()">Activar</button></div>
+          <div style="flex:0 0 auto; padding-top:1px;">
+            <label>&nbsp;</label>
+            <button class="btn btn-success" onclick="createLabelYesterdayTriggerUI()">Activar</button>
+          </div>
         </div>
       </div>
 
-      <div style="background:#f8f9fa; border-radius:6px; padding:12px; margin-bottom:12px;">
-        <p style="font-size:13px; font-weight:600; margin-bottom:8px;">🔄 Continuo (rango)</p>
-        <p style="font-size:12px; color:#666; margin-bottom:8px;">Etiqueta eventos en un rango alrededor de hoy. Útil si quieres cubrir eventos futuros también.</p>
+      <div style="background:var(--gray-50); border-radius:6px; padding:14px; margin-bottom:12px; border:1px solid var(--gray-200);">
+        <p class="section-title">🔄 Continuo (rango)</p>
+        <p class="text-sm text-muted" style="margin-bottom:10px;">Etiqueta eventos en un rango alrededor de hoy.</p>
         <div class="form-row">
-          <div class="form-group"><label>Días atrás</label><input type="number" id="daysBack" value="7"></div>
-          <div class="form-group"><label>Días adelante</label><input type="number" id="daysForward" value="30"></div>
+          <div><label>Días atrás</label><input type="number" id="daysBack" value="7"></div>
+          <div><label>Días adelante</label><input type="number" id="daysForward" value="30"></div>
         </div>
-        <div class="form-row">
-          <div style="flex:2;">
+        <div class="form-row" style="margin-top:8px;">
+          <div>
             <label>Frecuencia</label>
             <select id="triggerFrequency">
               <option value="5min">Cada 5 minutos</option>
@@ -74,89 +93,90 @@
               <option value="daily">Diario (8:00 AM)</option>
             </select>
           </div>
-          <div><label>&nbsp;</label><button class="btn btn-success" onclick="createTrigger()">Activar</button></div>
-        </div>
-      </div>
-
-      <div style="background:#f8f9fa; border-radius:6px; padding:12px; margin-bottom:12px;">
-        <p style="font-size:13px; font-weight:600; margin-bottom:8px;">🔍 Búsqueda por nombre</p>
-        <p style="font-size:12px; color:#666; margin-bottom:8px;">Rango de búsqueda cuando usas "Buscar por título" en la pestaña Ejecutar.</p>
-        <div class="form-row">
-          <div class="form-group"><label>Días atrás</label><input type="number" id="searchDaysBack" value="90"></div>
-          <div class="form-group"><label>Días adelante</label><input type="number" id="searchDaysForward" value="365"></div>
-        </div>
-      </div>
-
-      <div style="border-top:1px solid #eee; padding-top:12px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <span style="font-size:13px; font-weight:500;">Triggers activos</span>
-          <div style="display:flex; gap:6px;">
-            <button class="btn btn-sm btn-primary" onclick="loadTriggers()">🔄</button>
-            <button class="btn btn-sm btn-danger" onclick="removeAll()">Eliminar todos</button>
+          <div style="flex:0 0 auto; padding-top:1px;">
+            <label>&nbsp;</label>
+            <button class="btn btn-success" onclick="createTrigger()">Activar</button>
           </div>
         </div>
-        <div id="triggers-list"><p style="color:#888; font-size:13px;">Cargando...</p></div>
       </div>
+
+      <div style="background:var(--gray-50); border-radius:6px; padding:14px; border:1px solid var(--gray-200);">
+        <p class="section-title">🔍 Rango de búsqueda por título</p>
+        <div class="form-row">
+          <div><label>Días atrás</label><input type="number" id="searchDaysBack" value="90"></div>
+          <div><label>Días adelante</label><input type="number" id="searchDaysForward" value="365"></div>
+        </div>
+      </div>
+
+      <hr class="divider">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span class="section-title" style="margin:0;">Triggers activos</span>
+        <div class="btn-group">
+          <button class="btn btn-ghost btn-sm" onclick="loadTriggers()">🔄 Actualizar</button>
+          <button class="btn btn-danger btn-sm" onclick="removeAll()">Eliminar todos</button>
+        </div>
+      </div>
+      <div id="triggers-list"><div class="loading-placeholder"><span class="spinner dark"></span> Cargando...</div></div>
     </div>
 
     <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <h3>🏷️ Catálogo de Etiquetas</h3>
-        <button class="btn btn-sm btn-primary" onclick="syncLabelCatalogFromTempo()">🔄 Sincronizar desde Tempo</button>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <div class="card-title" style="margin-bottom:0;">🏷️ Catálogo de etiquetas</div>
+        <button class="btn btn-ghost btn-sm" onclick="syncLabelCatalogFromTempo()">🔄 Sincronizar desde Tempo</button>
       </div>
-      <p style="font-size:12px; color:#888; margin-bottom:12px;">Campos de Tempo que se escriben como etiquetas en los eventos del calendario. Marca cuáles mostrar y cuáles son obligatorios.</p>
+      <p class="card-subtitle">Campos de Tempo que se escriben como etiquetas en los eventos. Marca cuáles mostrar y cuáles son obligatorios.</p>
       <div id="label-catalog"></div>
-      <button class="btn btn-sm" style="background:#eee; margin-top:8px;" onclick="addCatalogLabel()">+ Agregar etiqueta manual</button>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="addCatalogLabel()">＋ Agregar etiqueta manual</button>
     </div>
 
     <button class="btn btn-success" onclick="saveEtiquetadoSettings()">💾 Guardar configuración Etiquetado</button>
   </div>
 
-  <!-- Tab: Tempo config -->
+  <!-- ── Tab: Tempo ── -->
   <div id="settings-tempo" class="tab-panel">
     <div class="card">
-      <h3 style="margin-bottom:12px;">🔑 Credenciales Jira</h3>
+      <div class="card-title">🔑 Credenciales Jira</div>
       <div class="form-group"><label>Jira Server URL</label><input type="text" id="tc-jira-server" placeholder="https://tu-org.atlassian.net"></div>
       <div class="form-row">
-        <div class="form-group"><label>Jira Email</label><input type="text" id="tc-jira-email"></div>
-        <div class="form-group"><label>Jira API Token</label><input type="password" id="tc-jira-token"></div>
+        <div><label>Jira Email</label><input type="text" id="tc-jira-email"></div>
+        <div><label>API Token</label><input type="password" id="tc-jira-token"></div>
       </div>
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:12px;">🔑 Credenciales Tempo</h3>
+      <div class="card-title">🔑 Credenciales Tempo</div>
       <div class="form-row">
-        <div class="form-group"><label>Tempo API Token</label><input type="password" id="tc-tempo-token"></div>
-        <div class="form-group"><label>Tempo Account ID</label><input type="text" id="tc-tempo-account"></div>
+        <div><label>Tempo API Token</label><input type="password" id="tc-tempo-token"></div>
+        <div><label>Tempo Account ID</label><input type="text" id="tc-tempo-account"></div>
       </div>
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:12px;">⏱️ Horarios y notificaciones</h3>
+      <div class="card-title">⏱️ Horarios y notificaciones</div>
       <div class="form-row">
-        <div class="form-group"><label>Hora inicio</label><input type="number" id="tc-hora-inicio" value="0"></div>
-        <div class="form-group"><label>Hora fin</label><input type="number" id="tc-hora-fin" value="24"></div>
-        <div class="form-group"><label>Email notificaciones</label><input type="text" id="tc-notify-email"></div>
+        <div><label>Hora inicio</label><input type="number" id="tc-hora-inicio" value="0" min="0" max="23"></div>
+        <div><label>Hora fin</label><input type="number" id="tc-hora-fin" value="24" min="1" max="24"></div>
+        <div><label>Email notificaciones</label><input type="text" id="tc-notify-email"></div>
       </div>
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:12px;">🏷️ Atributos Tempo</h3>
+      <div class="card-title">🏷️ Atributos Tempo</div>
       <div class="form-row">
-        <div class="form-group"><label>Actividad Key</label><input type="text" id="tc-attr-act"></div>
-        <div class="form-group"><label>Facturable Key</label><input type="text" id="tc-attr-fact"></div>
+        <div><label>Actividad Key</label><input type="text" id="tc-attr-act"></div>
+        <div><label>Facturable Key</label><input type="text" id="tc-attr-fact"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Facturable Sí (UUID)</label><input type="text" id="tc-attr-fact-si"></div>
-        <div class="form-group"><label>Facturable No (UUID)</label><input type="text" id="tc-attr-fact-no"></div>
+        <div><label>Facturable Sí (UUID)</label><input type="text" id="tc-attr-fact-si"></div>
+        <div><label>Facturable No (UUID)</label><input type="text" id="tc-attr-fact-no"></div>
       </div>
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:12px;">⏰ Trigger Tempo</h3>
-      <p style="font-size:13px; color:#666; margin-bottom:12px;">Sincroniza el día anterior automáticamente (lunes a viernes).</p>
+      <div class="card-title">⏰ Trigger Tempo</div>
+      <p class="card-subtitle">Sincroniza el día anterior automáticamente (lunes a viernes).</p>
       <div class="form-row">
-        <div style="flex:2;">
+        <div>
           <label>Frecuencia</label>
           <select id="tempoTriggerFrequency">
             <option value="daily0" selected>Diario (12:00 AM)</option>
@@ -165,53 +185,56 @@
             <option value="1hour">Cada hora</option>
           </select>
         </div>
-        <div><label>&nbsp;</label><button class="btn btn-success" onclick="createTempoTriggerUI()">Activar</button></div>
-      </div>
-      <div style="margin-top:12px; padding-top:12px; border-top:1px solid #eee;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <span style="font-size:13px; font-weight:500;">Triggers Tempo activos</span>
-          <button class="btn btn-sm btn-primary" onclick="loadTriggers()">🔄</button>
+        <div style="flex:0 0 auto; padding-top:1px;">
+          <label>&nbsp;</label>
+          <button class="btn btn-success" onclick="createTempoTriggerUI()">Activar</button>
         </div>
-        <div id="tempo-triggers-list"><p style="color:#888; font-size:13px;">Cargando...</p></div>
       </div>
+      <hr class="divider">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span class="section-title" style="margin:0;">Triggers Tempo activos</span>
+        <button class="btn btn-ghost btn-sm" onclick="loadTriggers()">🔄</button>
+      </div>
+      <div id="tempo-triggers-list"><div class="loading-placeholder"><span class="spinner dark"></span> Cargando...</div></div>
     </div>
 
     <button class="btn btn-success" onclick="saveTempoSettings()">💾 Guardar configuración Tempo</button>
 
     <div class="card" style="margin-top:16px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <h3>🎯 Actividades Tempo</h3>
-        <div style="display:flex; gap:6px;">
-          <button class="btn btn-sm btn-primary" onclick="syncActividadesFromTempo()">🔄 Sincronizar desde Tempo</button>
-          <button class="btn btn-sm" style="background:#eee;" onclick="addActividad()">+ Agregar</button>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <div class="card-title" style="margin-bottom:0;">🎯 Actividades Tempo</div>
+        <div class="btn-group">
+          <button class="btn btn-ghost btn-sm" onclick="syncActividadesFromTempo()">🔄 Sincronizar</button>
+          <button class="btn btn-ghost btn-sm" onclick="addActividad()">＋ Agregar</button>
         </div>
       </div>
-      <p style="font-size:12px; color:#888; margin-bottom:12px;">Catálogo de actividades para clasificación en Tempo. Puedes sincronizar desde la API o editar manualmente.</p>
+      <p class="card-subtitle">Catálogo de actividades para clasificación en Tempo.</p>
       <div id="actividades-list"></div>
       <button class="btn btn-success" style="margin-top:10px;" onclick="saveActividadesUI()">💾 Guardar actividades</button>
     </div>
   </div>
 
-  <!-- Tab: Planner config -->
+  <!-- ── Tab: Planificador ── -->
   <div id="settings-planner" class="tab-panel">
     <div class="card">
-      <h3 style="margin-bottom:12px;">🔑 Jira del Planificador</h3>
+      <div class="card-title">🔑 Jira del Planificador</div>
       <div class="form-group"><label>Jira Server URL</label><input type="text" id="pc-jira-server" placeholder="https://tu-org.atlassian.net"></div>
       <div class="form-row">
-        <div class="form-group"><label>Jira Email</label><input type="text" id="pc-jira-email"></div>
-        <div class="form-group"><label>Jira API Token</label><input type="password" id="pc-jira-token"></div>
+        <div><label>Jira Email</label><input type="text" id="pc-jira-email"></div>
+        <div><label>API Token</label><input type="password" id="pc-jira-token"></div>
       </div>
       <div class="form-group"><label>Project Key</label><input type="text" id="pc-project-key" placeholder="DMI"></div>
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:12px;">📅 Calendario</h3>
+      <div class="card-title">📅 Calendario</div>
       <div class="form-row">
-        <div class="form-group"><label>Nombre calendario</label><input type="text" id="pc-cal-name" placeholder="primary"></div>
-        <div class="form-group"><label>Calendar ID</label><input type="text" id="pc-cal-id" placeholder="tu@email.com"></div>
+        <div><label>Nombre calendario</label><input type="text" id="pc-cal-name" placeholder="primary"></div>
+        <div><label>Calendar ID</label><input type="text" id="pc-cal-id" placeholder="tu@email.com"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Color eventos</label>
+        <div>
+          <label>Color eventos</label>
           <select id="pc-event-color">
             <option value="CYAN">Cyan</option>
             <option value="BLUE">Azul</option>
@@ -222,82 +245,76 @@
             <option value="PURPLE">Morado</option>
           </select>
         </div>
-        <div class="form-group"><label>Invitados (emails separados por coma)</label><input type="text" id="pc-guests" placeholder="persona@dominio.com"></div>
+        <div><label>Invitados (emails, separados por coma)</label><input type="text" id="pc-guests"></div>
       </div>
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:12px;">⏰ Horario y bloques</h3>
+      <div class="card-title">⏰ Horario y bloques</div>
       <div class="form-row">
-        <div class="form-group"><label>Hora inicio</label><input type="number" id="pc-work-start" value="9"></div>
-        <div class="form-group"><label>Hora fin</label><input type="number" id="pc-work-end" value="18"></div>
-        <div class="form-group"><label>Mín. bloque (min)</label><input type="number" id="pc-min-block" value="30"></div>
+        <div><label>Hora inicio</label><input type="number" id="pc-work-start" value="9"></div>
+        <div><label>Hora fin</label><input type="number" id="pc-work-end" value="18"></div>
+        <div><label>Mín. bloque (min)</label><input type="number" id="pc-min-block" value="30"></div>
       </div>
     </div>
 
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <h3>📊 Story Points → Horas</h3>
-        <button class="btn btn-sm btn-primary" onclick="addSpMapping()">+ Agregar</button>
+        <div class="card-title" style="margin-bottom:0;">📊 Story Points → Horas</div>
+        <button class="btn btn-ghost btn-sm" onclick="addSpMapping()">＋ Agregar</button>
       </div>
-      <p style="font-size:12px; color:#888; margin-bottom:8px;">Mapeo de story points a horas de trabajo</p>
       <div id="sp-mapping"></div>
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:12px;">🔔 Webhook overflow</h3>
-      <div class="form-group"><label>Webhook URL (alerta cuando no caben las horas)</label><input type="text" id="pc-webhook" placeholder="https://chat.googleapis.com/..."></div>
+      <div class="card-title">🔔 Webhook overflow</div>
+      <div class="form-group">
+        <label>URL (alerta cuando no caben las horas)</label>
+        <input type="text" id="pc-webhook" placeholder="https://chat.googleapis.com/...">
+      </div>
     </div>
 
     <button class="btn btn-success" onclick="savePlannerSettings()">💾 Guardar configuración Planificador</button>
   </div>
 
-  <!-- Tab: Extractor/Reporte config -->
+  <!-- ── Tab: Extractor / Reporte ── -->
   <div id="settings-extractor" class="tab-panel">
     <div class="card">
-      <h3 style="margin-bottom:12px;">🔑 Jira del Reporte</h3>
+      <div class="card-title">🔑 Jira del Reporte</div>
       <div class="form-group"><label>Jira Server URL</label><input type="text" id="ext-jira-server" placeholder="https://tu-org.atlassian.net"></div>
       <div class="form-row">
-        <div class="form-group"><label>Jira Email</label><input type="text" id="ext-jira-email"></div>
-        <div class="form-group"><label>Jira API Token</label><input type="password" id="ext-jira-token"></div>
+        <div><label>Jira Email</label><input type="text" id="ext-jira-email"></div>
+        <div><label>API Token</label><input type="password" id="ext-jira-token"></div>
       </div>
       <div class="form-group"><label>Project Key</label><input type="text" id="ext-project-key" placeholder="DMI"></div>
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:12px;">📊 Spreadsheet destino</h3>
+      <div class="card-title">📊 Spreadsheet destino</div>
       <div class="form-row">
-        <div class="form-group"><label>Spreadsheet ID</label><input type="text" id="ext-spreadsheet-id" placeholder="ID del Google Spreadsheet"></div>
-        <div class="form-group"><label>Nombre de la hoja</label><input type="text" id="ext-sheet-name" placeholder="Reporte"></div>
+        <div><label>Spreadsheet ID</label><input type="text" id="ext-spreadsheet-id" placeholder="ID del Google Spreadsheet"></div>
+        <div><label>Nombre de la hoja</label><input type="text" id="ext-sheet-name" placeholder="Reporte"></div>
       </div>
       <div class="form-group">
         <label>Modo de escritura</label>
         <select id="ext-write-mode">
           <option value="upsert">Actualizar existentes + insertar nuevas</option>
-          <option value="insert">Solo insertar nuevas (ignorar existentes)</option>
+          <option value="insert">Solo insertar nuevas</option>
           <option value="append">Siempre agregar (permite duplicados)</option>
           <option value="clean">Limpiar todo y reescribir</option>
         </select>
       </div>
-      <p style="font-size:11px; color:#888;">El Spreadsheet ID está en la URL: docs.google.com/spreadsheets/d/<strong>ESTE_ES_EL_ID</strong>/edit</p>
+      <div class="info-hint">El Spreadsheet ID está en la URL: docs.google.com/spreadsheets/d/<strong>ESTE_ES_EL_ID</strong>/edit</div>
     </div>
 
     <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <h3>📋 Campos a extraer</h3>
-        <button class="btn btn-sm btn-primary" onclick="loadJiraFields()">Cargar campos de Jira</button>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <div class="card-title" style="margin-bottom:0;">📋 Campos a extraer</div>
+        <button class="btn btn-ghost btn-sm" onclick="loadJiraFields()">Cargar campos de Jira</button>
       </div>
-      <p style="font-size:12px; color:#888; margin-bottom:12px;">Selecciona los campos que se extraerán y se guardarán en el Spreadsheet.</p>
-      <div id="ext-fields-list"><p style="color:#888; font-size:13px;">Guarda las credenciales y luego carga los campos.</p></div>
+      <div id="ext-fields-list"><p class="text-muted text-sm">Guarda las credenciales y luego carga los campos.</p></div>
     </div>
 
     <button class="btn btn-success" onclick="saveExtConfig()">💾 Guardar configuración Reporte</button>
-  </div>
-
-  <!-- Modal reutilizable para editar valores -->
-  <div id="event-detail-modal" class="modal-overlay" style="display:none;">
-    <div class="modal">
-      <div id="event-detail-content"></div>
-    </div>
   </div>
 </div>

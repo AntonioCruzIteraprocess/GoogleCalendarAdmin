@@ -1,39 +1,64 @@
 <script>
-// ─── STATE ───────────────────────────────────────────────
-let rules = [];
-let config = {};
+// ─── STATE ─────────────────────────────────────────────────
+let rules       = [];
+let config      = {};
+let tempoConfig = {};
+let actividades = {};
 let editingRuleIndex = -1;
 let modalGroups = [];
 let modalLabels = [];
-let tempoConfig = {};
-let actividades = {};
 
-// ─── INIT ────────────────────────────────────────────────
-const today = new Date();
-const weekAgo = new Date(today.getTime() - 7 * 86400000);
-document.getElementById("startDate").value = weekAgo.toISOString().split("T")[0];
-document.getElementById("endDate").value = today.toISOString().split("T")[0];
+// Proyecto activo (se guarda en sessionStorage para persistir entre navegaciones)
+let activeProject = null;
 
-google.script.run.withSuccessHandler(c => {
-  config = c;
-  rules = c.rules || [];
-  document.getElementById("daysBack").value = c.daysBack || 7;
-  document.getElementById("daysForward").value = c.daysForward || 30;
-  document.getElementById("searchDaysBack").value = c.searchDaysBack || 90;
-  document.getElementById("searchDaysForward").value = c.searchDaysForward || 365;
-  document.getElementById("webhookUrl").value = c.webhookUrl || "";
-  document.getElementById("webhookEnabled").checked = c.webhookEnabled !== false;
-  renderRulesList();
-}).getConfig();
+// ─── INIT ───────────────────────────────────────────────────
+const _today   = new Date();
+const _weekAgo = new Date(_today.getTime() - 7 * 86400000);
+document.getElementById("startDate").value = _weekAgo.toISOString().split("T")[0];
+document.getElementById("endDate").value   = _today.toISOString().split("T")[0];
 
-// ─── NAVIGATION ──────────────────────────────────────────
-function showPage(page) {
+// Cargar config al arrancar
+google.script.run
+  .withSuccessHandler(c => {
+    config = c;
+    rules  = c.rules || [];
+
+    // Restaurar proyecto activo desde sessionStorage
+    const savedProjectId = sessionStorage.getItem("activeProjectId");
+    const projects       = c.projects || [];
+    activeProject = projects.find(p => p.id === savedProjectId) || projects[0] || null;
+
+    updateProjectSidebar();
+    renderRulesList();
+
+    // Sincronizar campos de config
+    document.getElementById("daysBack").value         = c.daysBack    || 7;
+    document.getElementById("daysForward").value      = c.daysForward || 30;
+    document.getElementById("searchDaysBack").value   = c.searchDaysBack   || 90;
+    document.getElementById("searchDaysForward").value = c.searchDaysForward || 365;
+    document.getElementById("webhookUrl").value       = c.webhookUrl    || "";
+    document.getElementById("webhookEnabled").checked = c.webhookEnabled !== false;
+  })
+  .getConfig();
+
+// ─── NAVIGATION ─────────────────────────────────────────────
+function showPage(page, btn) {
   document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
   document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
   document.getElementById("page-" + page).classList.add("active");
-  event.target.classList.add("active");
-  if (page === "settings") { loadTriggers(); loadCalendars(); loadTempoConfigUI(); loadPlannerConfigUI(); loadExtractorConfigUI(); loadActividadesUI(); loadLabelCatalog(); }
+  if (btn) {
+    btn.classList.add("active");
+  } else {
+    const navBtn = document.querySelector(`.nav-item[data-page="${page}"]`);
+    if (navBtn) navBtn.classList.add("active");
+  }
+  if (page === "settings") {
+    loadTriggers(); loadCalendars(); loadTempoConfigUI();
+    loadPlannerConfigUI(); loadExtractorConfigUI();
+    loadActividadesUI(); loadLabelCatalog(); renderProjectsList();
+  }
   if (page === "extractor") loadExtractorConfigUI();
+  closeProjectDropdown();
 }
 
 function switchTab(page, tab) {
@@ -44,20 +69,98 @@ function switchTab(page, tab) {
   event.target.classList.add("active");
 }
 
-// ─── TOAST ───────────────────────────────────────────────
-function toast(msg, type) {
+// ─── TOAST ──────────────────────────────────────────────────
+function toast(msg, type = "success") {
   const el = document.getElementById("toast");
   el.textContent = msg;
   el.className = "toast " + type;
-  setTimeout(() => el.className = "toast", 4000);
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => el.className = "toast", 4000);
 }
 
-// ─── PERSIST ─────────────────────────────────────────────
+// ─── CONFIG PERSISTENCE ─────────────────────────────────────
 function persistConfig() {
   config.rules = rules;
   google.script.run
     .withSuccessHandler(() => toast("✓ Guardado", "success"))
     .withFailureHandler(e => toast("Error: " + e.message, "error"))
     .saveConfig(config);
+}
+
+// ─── PROJECTS ────────────────────────────────────────────────
+
+/** Colores disponibles para proyectos */
+const PROJECT_COLORS = ["#4285f4","#34a853","#ea4335","#fbbc04","#9c27b0","#ff5722","#00bcd4","#607d8b"];
+
+function getProjects() {
+  return config.projects || [];
+}
+
+function setActiveProject(project) {
+  activeProject = project;
+  sessionStorage.setItem("activeProjectId", project ? project.id : "");
+  updateProjectSidebar();
+  closeProjectDropdown();
+}
+
+function updateProjectSidebar() {
+  const nameEl = document.getElementById("sidebar-project-name");
+  if (activeProject) {
+    nameEl.textContent = activeProject.name;
+    nameEl.style.color = activeProject.color || "white";
+  } else {
+    nameEl.textContent = "Sin proyecto";
+    nameEl.style.color = "rgba(255,255,255,0.5)";
+  }
+  renderProjectDropdownList();
+}
+
+function toggleProjectDropdown() {
+  const dd = document.getElementById("project-dropdown");
+  dd.classList.toggle("open");
+}
+
+function closeProjectDropdown() {
+  document.getElementById("project-dropdown").classList.remove("open");
+}
+
+// Cerrar dropdown al hacer clic fuera
+document.addEventListener("click", e => {
+  const switcher = document.querySelector(".project-switcher");
+  const dd = document.getElementById("project-dropdown");
+  if (!switcher.contains(e.target) && !dd.contains(e.target)) closeProjectDropdown();
+});
+
+function renderProjectDropdownList() {
+  const list = document.getElementById("project-dropdown-list");
+  const projects = getProjects();
+  if (projects.length === 0) {
+    list.innerHTML = `<div class="project-option" style="cursor:default; opacity:0.5;">No hay proyectos</div>`;
+    return;
+  }
+  list.innerHTML = projects.map(p => `
+    <div class="project-option ${activeProject && activeProject.id === p.id ? 'current' : ''}"
+         onclick="setActiveProject(${JSON.stringify(p).replace(/"/g,'&quot;')})">
+      <span class="project-option-dot" style="background:${p.color || '#4285f4'}"></span>
+      ${escHtml(p.name)}
+    </div>
+  `).join("");
+}
+
+/** Genera un ID único para proyectos */
+function genProjectId() {
+  return "proj_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// ─── UTILITIES ───────────────────────────────────────────────
+function escHtml(s) {
+  return String(s || "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function loading(containerId) {
+  document.getElementById(containerId).innerHTML =
+    `<div class="loading-placeholder"><span class="spinner dark"></span> Cargando...</div>`;
 }
 </script>

@@ -1,44 +1,67 @@
 <div id="page-tempo" class="page">
-  <h1 class="page-title">⏱️ Tempo</h1>
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('tempo','sync')">Sync</div>
-    <div class="tab" onclick="switchTab('tempo','borrar')">Borrar</div>
-    <div class="tab" onclick="switchTab('tempo','consultar')">Consultar</div>
+  <div class="page-header">
+    <div>
+      <div class="page-title">⏱️ Tempo</div>
+      <div class="page-subtitle" id="tempo-project-label">Sincroniza eventos del calendario como worklogs en Tempo</div>
+    </div>
   </div>
 
-  <!-- Tab: Sync (Preview + Cargar) -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('tempo','sync')">Preview & Sync</div>
+    <div class="tab" onclick="switchTab('tempo','consultar')">Consultar</div>
+    <div class="tab" onclick="switchTab('tempo','borrar')">Borrar</div>
+  </div>
+
+  <!-- Tab: Sync -->
   <div id="tempo-sync" class="tab-panel active">
     <div class="card">
+      <div class="card-title">📅 Rango de sincronización</div>
       <div class="form-row">
         <div><label>Desde</label><input type="date" id="tempoSyncFrom"></div>
         <div><label>Hasta</label><input type="date" id="tempoSyncTo"></div>
-        <div><label>&nbsp;</label><button class="btn btn-primary" onclick="tempoPreview()">Preview</button></div>
+        <div style="flex:0 0 auto; padding-top:1px;">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" onclick="tempoPreview()">
+            🔍 Preview
+          </button>
+        </div>
       </div>
     </div>
     <div id="tempo-preview"></div>
   </div>
 
-  <!-- Tab: Borrar -->
-  <div id="tempo-borrar" class="tab-panel">
-    <div class="card">
-      <div class="form-row">
-        <div><label>Desde</label><input type="date" id="tempoDeleteFrom"></div>
-        <div><label>Hasta</label><input type="date" id="tempoDeleteTo"></div>
-        <div><label>&nbsp;</label><button class="btn btn-danger" onclick="tempoDeleteRangeUI()">Borrar worklogs</button></div>
-      </div>
-    </div>
-    <div id="tempo-delete-results"></div>
-  </div>
-
   <!-- Tab: Consultar -->
   <div id="tempo-consultar" class="tab-panel">
     <div class="card">
+      <div class="card-title">📋 Worklogs cargados en Tempo</div>
       <div class="form-row">
         <div><label>Desde</label><input type="date" id="tempoViewFrom"></div>
         <div><label>Hasta</label><input type="date" id="tempoViewTo"></div>
-        <div><label>&nbsp;</label><button class="btn btn-primary" onclick="viewWorklogs()">Consultar</button></div>
+        <div style="flex:0 0 auto; padding-top:1px;">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" onclick="viewWorklogs()">Consultar</button>
+        </div>
       </div>
     </div>
     <div id="tempo-worklogs"></div>
+  </div>
+
+  <!-- Tab: Borrar -->
+  <div id="tempo-borrar" class="tab-panel">
+    <div class="card">
+      <div class="alert alert-danger" style="margin-bottom:12px;">
+        ⚠️ Esta acción borra permanentemente los worklogs en Tempo del rango seleccionado.
+      </div>
+      <div class="card-title">🗑️ Borrar worklogs por rango</div>
+      <div class="form-row">
+        <div><label>Desde</label><input type="date" id="tempoDeleteFrom"></div>
+        <div><label>Hasta</label><input type="date" id="tempoDeleteTo"></div>
+        <div style="flex:0 0 auto; padding-top:1px;">
+          <label>&nbsp;</label>
+          <button class="btn btn-danger" onclick="tempoDeleteRangeUI()">Borrar worklogs</button>
+        </div>
+      </div>
+    </div>
+    <div id="tempo-delete-results"></div>
   </div>
 </div>

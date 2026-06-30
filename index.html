@@ -1,20 +1,58 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
+  <meta charset="UTF-8">
   <?!= include('css') ?>
 </head>
 <body>
-  <!-- Sidebar -->
+
+  <!-- ─── SIDEBAR ─────────────────────────────────────── -->
   <div class="sidebar">
-    <h2>📅 Calendar Manager</h2>
-    <button class="nav-item active" onclick="showPage('labeling')">🏷️ Etiquetado</button>
-    <button class="nav-item" onclick="showPage('tempo')">⏱️ Tempo</button>
-    <button class="nav-item" onclick="showPage('planner')">📋 Planificador</button>
-    <button class="nav-item" onclick="showPage('extractor')">📊 Reporte Provident</button>
-    <button class="nav-item" onclick="showPage('settings')">⚙️ Configuración</button>
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <span class="sidebar-logo-icon">📅</span>
+        Calendar Manager
+      </div>
+
+      <!-- Project Switcher -->
+      <div style="position:relative;">
+        <div class="project-switcher" onclick="toggleProjectDropdown()">
+          <span class="project-switcher-name" id="sidebar-project-name">Sin proyecto</span>
+          <span class="project-switcher-chevron">▼</span>
+        </div>
+        <div class="project-dropdown" id="project-dropdown">
+          <div id="project-dropdown-list"></div>
+          <div class="project-add-btn" onclick="showPage('settings'); switchTab('settings','proyectos'); closeProjectDropdown();">
+            ＋ Nuevo proyecto
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Módulos</div>
+      <button class="nav-item active" data-page="labeling" onclick="showPage('labeling', this)">
+        <span class="nav-item-icon">🏷️</span> Etiquetado
+      </button>
+      <button class="nav-item" data-page="tempo" onclick="showPage('tempo', this)">
+        <span class="nav-item-icon">⏱️</span> Tempo
+      </button>
+      <button class="nav-item" data-page="planner" onclick="showPage('planner', this)">
+        <span class="nav-item-icon">📋</span> Planificador
+      </button>
+      <button class="nav-item" data-page="extractor" onclick="showPage('extractor', this)">
+        <span class="nav-item-icon">📊</span> Reporte
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="nav-item" data-page="settings" onclick="showPage('settings', this)">
+        <span class="nav-item-icon">⚙️</span> Configuración
+      </button>
+    </div>
   </div>
 
-  <!-- Main -->
+  <!-- ─── MAIN ─────────────────────────────────────────── -->
   <div class="main">
     <?!= include('page-labeling') ?>
     <?!= include('page-tempo') ?>
@@ -23,7 +61,7 @@
     <?!= include('page-settings') ?>
   </div>
 
-  <!-- Modal -->
+  <!-- Modal de reglas -->
   <?!= include('modal-rule') ?>
 
   <!-- Toast -->
@@ -36,5 +74,6 @@
   <?!= include('js-planner') ?>
   <?!= include('js-extractor') ?>
   <?!= include('js-settings') ?>
+
 </body>
 </html>

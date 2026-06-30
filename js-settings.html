@@ -1,4 +1,129 @@
 <script>
+// ─── PROYECTOS ────────────────────────────────────────────
+
+const PROJECT_PALETTE = ["#4285f4","#34a853","#ea4335","#fbbc04","#9c27b0","#ff5722","#00bcd4","#f06292"];
+
+function renderProjectsList() {
+  const projects = getProjects();
+  const container = document.getElementById("projects-list");
+  if (projects.length === 0) {
+    container.innerHTML = `<div class="empty-state">
+      <div class="empty-state-icon">🗂️</div>
+      <div class="empty-state-title">Sin proyectos</div>
+      <div class="empty-state-text">Crea tu primer proyecto para organizar credenciales y configuración por cliente o iniciativa.</div>
+    </div>`;
+    return;
+  }
+  container.innerHTML = `<div class="table-wrapper"><table>
+    <thead><tr>
+      <th>Proyecto</th><th>Jira Server</th><th>Project Key</th><th>Activo</th><th>Acciones</th>
+    </tr></thead>
+    <tbody>${projects.map((p, i) => `
+      <tr>
+        <td>
+          <span style="display:inline-flex; align-items:center; gap:7px;">
+            <span style="width:10px;height:10px;border-radius:50%;background:${p.color || '#4285f4'};flex-shrink:0;"></span>
+            <strong>${escHtml(p.name)}</strong>
+          </span>
+        </td>
+        <td class="text-muted text-sm">${escHtml(p.jiraServer || "—")}</td>
+        <td>${p.projectKey ? `<span class="badge badge-blue">${escHtml(p.projectKey)}</span>` : "<span class='text-muted'>—</span>"}</td>
+        <td>${activeProject && activeProject.id === p.id ? '<span class="badge badge-green">● Activo</span>' : `<button class="btn btn-ghost btn-sm" onclick="setActiveProject(${JSON.stringify(p).replace(/"/g,'&quot;')})">Activar</button>`}</td>
+        <td>
+          <div class="btn-group">
+            <button class="btn btn-ghost btn-sm" onclick="openProjectModal(${i})">✏️</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteProject(${i})">🗑️</button>
+          </div>
+        </td>
+      </tr>`).join("")}
+    </tbody>
+  </table></div>`;
+}
+
+function openProjectModal(idx) {
+  const projects = getProjects();
+  const p = idx >= 0 ? projects[idx] : { id: genProjectId(), name: "", color: PROJECT_PALETTE[projects.length % PROJECT_PALETTE.length], jiraServer: "", jiraEmail: "", jiraToken: "", projectKey: "" };
+  const title = idx >= 0 ? "Editar proyecto" : "Nuevo proyecto";
+
+  const html = `
+    <div class="modal-header">
+      <span class="modal-title">${title}</span>
+      <button class="modal-close" onclick="closeModal('project-modal')">✕</button>
+    </div>
+    <div class="form-row">
+      <div style="flex:2;"><label>Nombre del proyecto</label><input id="pm-name" type="text" value="${escHtml(p.name)}" placeholder="Ej: Provident, ClienteX..."></div>
+      <div style="flex:0 0 auto;">
+        <label>Color</label>
+        <select id="pm-color">${PROJECT_PALETTE.map(c => `<option value="${c}" ${p.color===c?'selected':''}>${c}</option>`).join("")}</select>
+      </div>
+    </div>
+    <div class="form-group"><label>Jira Server URL</label><input id="pm-server" type="text" value="${escHtml(p.jiraServer||'')}" placeholder="https://tu-org.atlassian.net"></div>
+    <div class="form-row">
+      <div><label>Jira Email</label><input id="pm-email" type="text" value="${escHtml(p.jiraEmail||'')}"></div>
+      <div><label>Jira API Token</label><input id="pm-token" type="password" value="${escHtml(p.jiraToken||'')}"></div>
+    </div>
+    <div class="form-group"><label>Project Key (Jira)</label><input id="pm-key" type="text" value="${escHtml(p.projectKey||'')}" placeholder="Ej: DMI, ABC"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('project-modal')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveProjectModal(${idx}, '${p.id}')">Guardar</button>
+    </div>`;
+
+  showModal("project-modal", html);
+}
+
+function saveProjectModal(idx, id) {
+  const projects = getProjects();
+  const proj = {
+    id:          id,
+    name:        document.getElementById("pm-name").value.trim(),
+    color:       document.getElementById("pm-color").value,
+    jiraServer:  document.getElementById("pm-server").value.trim(),
+    jiraEmail:   document.getElementById("pm-email").value.trim(),
+    jiraToken:   document.getElementById("pm-token").value.trim(),
+    projectKey:  document.getElementById("pm-key").value.trim()
+  };
+  if (!proj.name) { toast("El nombre es obligatorio", "warning"); return; }
+  if (idx >= 0) projects[idx] = proj;
+  else projects.push(proj);
+  config.projects = projects;
+  persistConfig();
+  closeModal("project-modal");
+  renderProjectsList();
+  updateProjectSidebar();
+}
+
+function deleteProject(idx) {
+  if (!confirm("¿Eliminar este proyecto?")) return;
+  const projects = getProjects();
+  const removed = projects.splice(idx, 1)[0];
+  config.projects = projects;
+  if (activeProject && activeProject.id === removed.id) {
+    setActiveProject(projects[0] || null);
+  }
+  persistConfig();
+  renderProjectsList();
+  updateProjectSidebar();
+}
+
+// Generic modal helper
+function showModal(id, html) {
+  let el = document.getElementById(id);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = id;
+    el.className = "modal-overlay";
+    el.innerHTML = `<div class="modal">${html}</div>`;
+    document.body.appendChild(el);
+  } else {
+    el.querySelector(".modal").innerHTML = html;
+  }
+  el.classList.add("active");
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove("active");
+}
+
 // ─── CONFIGURACIÓN: CALENDARIOS ──────────────────────────
 
 function loadCalendars() {
