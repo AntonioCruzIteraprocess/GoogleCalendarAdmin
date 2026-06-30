@@ -1,0 +1,19 @@
+<script>
+// ─── CORE ────────────────────────────────────────────────
+
+function showPage(page) {
+  document.querySelectorAll(".page").forEach(function(p){ p.classList.remove("active"); });
+  document.querySelectorAll(".nav-item").forEach(function(n){ n.classList.remove("active"); });
+  document.getElementById("page-" + page).classList.add("active");
+  event.target.classList.add("active");
+  if (page === "overview") loadDashboard();
+  if (page === "settings") loadDashSettings();
+}
+
+function toast(msg, type) {
+  var el = document.getElementById("toast");
+  el.textContent = msg;
+  el.className = "toast " + type;
+  setTimeout(function(){ el.className = "toast"; }, 4000);
+}
+</script>

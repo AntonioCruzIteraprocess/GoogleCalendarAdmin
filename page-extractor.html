@@ -1,0 +1,56 @@
+<div id="page-extractor" class="page">
+  <h1 class="page-title">📊 Reporte Provident</h1>
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('extractor','ejecutar')">Ejecutar</div>
+  </div>
+
+  <div id="extractor-ejecutar" class="tab-panel active">
+    <div class="card">
+      <h3 style="margin-bottom:12px;">Filtros</h3>
+
+      <!-- Filtros guardados -->
+      <div class="form-row" style="margin-bottom:12px;">
+        <div style="flex:2;">
+          <label>Filtros guardados</label>
+          <select id="extSavedFilter" onchange="loadSavedFilter()">
+            <option value="">-- Nuevo filtro --</option>
+          </select>
+        </div>
+        <div><label>&nbsp;</label><button class="btn btn-sm btn-danger" onclick="deleteSavedFilter()">🗑️</button></div>
+      </div>
+
+      <!-- Filtro de fecha -->
+      <div class="form-group">
+        <label>Filtrar fechas por</label>
+        <select id="extFilterType">
+          <option value="duedate">Fecha de vencimiento</option>
+          <option value="originalDueDate">Original Due Date</option>
+          <option value="any">Cualquiera (OR)</option>
+          <option value="both">Ambas (AND)</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div><label>Desde</label><input type="date" id="extDateFrom"></div>
+        <div><label>Hasta</label><input type="date" id="extDateTo"></div>
+      </div>
+
+      <!-- Constructor de filtros por campo -->
+      <div style="margin-top:16px; padding-top:16px; border-top:1px solid #eee;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <label style="margin:0; font-weight:600;">Filtros por campo</label>
+          <button class="btn btn-sm btn-primary" onclick="addFieldFilter()">+ Agregar filtro</button>
+        </div>
+        <div id="ext-field-filters"></div>
+      </div>
+
+      <!-- Acciones -->
+      <div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="extPreview()">🔍 Preview</button>
+        <button class="btn btn-success" onclick="extRun()">💾 Extraer y Guardar</button>
+        <button class="btn btn-sm" style="background:#eee; margin-left:auto;" onclick="saveCurrentFilter()">💾 Guardar filtro</button>
+      </div>
+    </div>
+
+    <div id="ext-results"></div>
+  </div>
+</div>

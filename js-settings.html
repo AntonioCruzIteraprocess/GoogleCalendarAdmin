@@ -1,0 +1,334 @@
+<script>
+// ─── CONFIGURACIÓN: CALENDARIOS ──────────────────────────
+
+function loadCalendars() {
+  google.script.run.withSuccessHandler(function(calendars){
+    var selected = config.calendarIds || [config.calendarId || "primary"];
+    document.getElementById("calendars-list").innerHTML = calendars.map(function(cal){
+      var checked = selected.includes(cal.id) ? "checked" : "";
+      return '<div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #f5f5f5;">'
+        + '<input type="checkbox" class="cal-check" value="' + cal.id + '" ' + checked + ' style="width:16px; height:16px;">'
+        + '<span style="font-size:14px;">' + cal.name + '</span>'
+        + '<span style="font-size:11px; color:#aaa;">' + cal.id + '</span></div>';
+    }).join("");
+  }).withFailureHandler(function(e){ toast("Error calendarios: " + e.message, "error"); }).getAvailableCalendars();
+}
+
+// ─── CONFIGURACIÓN: TRIGGERS ─────────────────────────────
+
+function loadTriggers() {
+  google.script.run.withSuccessHandler(function(triggers){
+    // Triggers de etiquetado (labelCalendarEvents + labelYesterday)
+    var labelTriggers = triggers.filter(function(t){ return t.handler === "labelCalendarEvents" || t.handler === "labelYesterday"; });
+    var container = document.getElementById("triggers-list");
+    if (labelTriggers.length === 0) {
+      container.innerHTML = '<p style="color:#888; font-size:13px;">No hay triggers activos.</p>';
+    } else {
+      var rows = labelTriggers.map(function(t){
+        var desc = t.handler === "labelYesterday" ? "D\u00eda vencido" : "Continuo (rango)";
+        return '<tr><td style="font-weight:500;">' + desc + '</td>'
+          + '<td><span class="badge badge-blue">' + t.handler + '</span></td>'
+          + '<td><span class="badge badge-gray">' + t.type + '</span></td>'
+          + '<td><button class="btn btn-sm btn-danger" onclick="removeTrigger(\'' + t.id + '\')">Eliminar</button></td></tr>';
+      }).join("");
+      container.innerHTML = '<table><tr><th>Modo</th><th>Funci\u00f3n</th><th>Tipo</th><th></th></tr>' + rows + '</table>';
+    }
+
+    // Triggers de tempo
+    var tempoTriggers = triggers.filter(function(t){ return t.handler === "tempoSyncYesterday"; });
+    var tContainer = document.getElementById("tempo-triggers-list");
+    if (tContainer) {
+      if (tempoTriggers.length === 0) {
+        tContainer.innerHTML = '<p style="color:#888; font-size:13px;">No hay triggers activos.</p>';
+      } else {
+        var tRows = tempoTriggers.map(function(t){
+          return '<tr><td style="font-weight:500;">' + t.handler + '</td>'
+            + '<td><span class="badge badge-blue">' + t.type + '</span></td>'
+            + '<td><button class="btn btn-sm btn-danger" onclick="removeTrigger(\'' + t.id + '\')">Eliminar</button></td></tr>';
+        }).join("");
+        tContainer.innerHTML = '<table><tr><th>Funci\u00f3n</th><th>Tipo</th><th></th></tr>' + tRows + '</table>';
+      }
+    }
+  }).withFailureHandler(function(e){ toast("Error: " + e.message, "error"); }).getTriggerStatus();
+}
+
+function createTrigger() {
+  config.daysBack = parseInt(document.getElementById("daysBack").value);
+  config.daysForward = parseInt(document.getElementById("daysForward").value);
+  persistConfig();
+  var frequency = document.getElementById("triggerFrequency").value;
+  google.script.run.withSuccessHandler(function(r){
+    if (r.success) { toast("\u2713 Trigger etiquetado creado: " + frequency, "success"); loadTriggers(); }
+    else { toast("Error: " + r.error, "error"); }
+  }).withFailureHandler(function(e){ toast("Error: " + e.message, "error"); }).createTriggerByType(frequency);
+}
+
+function createLabelYesterdayTriggerUI() {
+  var hour = document.getElementById("labelYesterdayHour").value;
+  google.script.run.withSuccessHandler(function(r){
+    if (r.success) { toast("\u2713 Trigger dia vencido activado a las " + hour + ":00", "success"); loadTriggers(); }
+    else { toast("Error: " + r.error, "error"); }
+  }).withFailureHandler(function(e){ toast("Error: " + e.message, "error"); }).createLabelYesterdayTrigger(parseInt(hour));
+}
+
+function createTempoTriggerUI() {
+  var frequency = document.getElementById("tempoTriggerFrequency").value;
+  google.script.run.withSuccessHandler(function(r){
+    if (r.success) { toast("\u2713 Trigger Tempo creado: " + frequency, "success"); loadTriggers(); }
+    else { toast("Error: " + r.error, "error"); }
+  }).withFailureHandler(function(e){ toast("Error: " + e.message, "error"); }).createTempoTrigger(frequency);
+}
+
+function removeTrigger(id) {
+  google.script.run.withSuccessHandler(function(r){ if (r.success) { toast("\u2713 Eliminado", "success"); loadTriggers(); } }).removeTriggerById(id);
+}
+
+function removeAll() {
+  if (!confirm("\u00bfEliminar todos los triggers?")) return;
+  google.script.run.withSuccessHandler(function(){ toast("\u2713 Todos eliminados", "success"); loadTriggers(); }).removeAllTriggers();
+}
+
+// ─── CONFIGURACIÓN: GUARDAR ETIQUETADO ───────────────────
+
+function saveEtiquetadoSettings() {
+  config.calendarIds = Array.from(document.querySelectorAll(".cal-check:checked")).map(function(el){ return el.value; });
+  config.daysBack = parseInt(document.getElementById("daysBack").value);
+  config.daysForward = parseInt(document.getElementById("daysForward").value);
+  config.searchDaysBack = parseInt(document.getElementById("searchDaysBack").value);
+  config.searchDaysForward = parseInt(document.getElementById("searchDaysForward").value);
+  config.webhookUrl = document.getElementById("webhookUrl").value.trim();
+  config.webhookEnabled = document.getElementById("webhookEnabled").checked;
+  config.labelCatalog = _labelCatalog;
+  config.requiredLabels = _labelCatalog.filter(function(l){ return l.required && l.show && l.key; }).map(function(l){ return l.key; });
+  persistConfig();
+}
+
+var _labelCatalog = [];
+
+function loadLabelCatalog() {
+  _labelCatalog = config.labelCatalog || [
+    { key: "ID", label: "ID", required: true, show: true, source: "manual", values: [] },
+    { key: "Tipo", label: "Tipo", required: true, show: true, source: "manual", values: [{value:"Facturable",name:"Facturable"},{value:"No facturable",name:"No facturable"}] },
+    { key: "Actividad", label: "Actividad", required: true, show: true, source: "manual", values: [] }
+  ];
+  renderLabelCatalog();
+}
+
+function renderLabelCatalog() {
+  var container = document.getElementById("label-catalog");
+  if (!_labelCatalog.length) { container.innerHTML = '<p style="color:#888; font-size:13px;">No hay etiquetas. Sincroniza desde Tempo o agrega manualmente.</p>'; return; }
+  var rows = _labelCatalog.map(function(l, i){
+    var valuesPreview = l.values && l.values.length ? '<button class="btn btn-sm" style="background:#eee; font-size:11px;" onclick="editCatalogValues(' + i + ')">' + l.values.length + ' opciones \u270f\ufe0f</button>' : '<span style="color:#aaa; font-size:11px;">texto libre</span>';
+    return '<tr>'
+      + '<td><input type="text" value="' + (l.label || l.key) + '" style="font-size:12px;" onchange="_labelCatalog[' + i + '].label=this.value; _labelCatalog[' + i + '].key=this.value"></td>'
+      + '<td style="text-align:center;"><input type="checkbox" ' + (l.show ? 'checked' : '') + ' onchange="_labelCatalog[' + i + '].show=this.checked" style="width:16px; height:16px;"></td>'
+      + '<td style="text-align:center;"><input type="checkbox" ' + (l.required ? 'checked' : '') + ' onchange="_labelCatalog[' + i + '].required=this.checked" style="width:16px; height:16px;"></td>'
+      + '<td>' + valuesPreview + '</td>'
+      + '<td><button class="btn btn-sm btn-danger" onclick="removeCatalogLabel(' + i + ')">\u2715</button></td></tr>';
+  }).join("");
+  container.innerHTML = '<table><tr><th>Etiqueta</th><th>Mostrar</th><th>Obligatoria</th><th>Valores</th><th></th></tr>' + rows + '</table>';
+}
+
+function addCatalogLabel() { _labelCatalog.push({ key: "", label: "", required: false, show: true, source: "manual", values: [] }); renderLabelCatalog(); }
+function removeCatalogLabel(i) { _labelCatalog.splice(i, 1); renderLabelCatalog(); }
+
+function editCatalogValues(i) {
+  var item = _labelCatalog[i];
+  var html = '<div class="modal-title">Valores de: ' + (item.label || item.key) + '</div>';
+  html += '<p style="font-size:12px; color:#888; margin-bottom:12px;">Edita el nombre visible de cada valor. El "value" es lo que se guarda internamente.</p>';
+  html += '<div id="catalog-values-editor"></div>';
+  html += '<button class="btn btn-sm" style="background:#eee; margin-top:8px;" onclick="addCatalogValue()">+ Agregar valor</button>';
+  html += '<div style="margin-top:12px; text-align:right;"><button class="btn btn-success" onclick="saveCatalogValues(' + i + ')">Guardar</button> <button class="btn" style="background:#eee;" onclick="closeCatalogValues()">Cancelar</button></div>';
+
+  document.getElementById("event-detail-content").innerHTML = html;
+  window._editingCatalogValues = JSON.parse(JSON.stringify(item.values || []));
+  renderCatalogValuesEditor();
+  document.getElementById("event-detail-modal").classList.add("active");
+}
+
+function renderCatalogValuesEditor() {
+  var vals = window._editingCatalogValues;
+  var html = '<table style="width:100%;"><tr><th>Value (interno)</th><th>Nombre (visible)</th><th></th></tr>';
+  vals.forEach(function(v, j){
+    html += '<tr><td><input type="text" value="' + v.value + '" style="font-size:12px;" onchange="window._editingCatalogValues[' + j + '].value=this.value"></td>'
+      + '<td><input type="text" value="' + v.name + '" style="font-size:12px;" onchange="window._editingCatalogValues[' + j + '].name=this.value"></td>'
+      + '<td><button class="btn btn-sm btn-danger" onclick="window._editingCatalogValues.splice(' + j + ',1); renderCatalogValuesEditor()">\u2715</button></td></tr>';
+  });
+  html += '</table>';
+  document.getElementById("catalog-values-editor").innerHTML = html;
+}
+
+function addCatalogValue() { window._editingCatalogValues.push({ value: "", name: "" }); renderCatalogValuesEditor(); }
+
+function saveCatalogValues(i) {
+  _labelCatalog[i].values = window._editingCatalogValues;
+  renderLabelCatalog();
+  document.getElementById("event-detail-modal").classList.remove("active");
+}
+
+function closeCatalogValues() {
+  document.getElementById("event-detail-modal").classList.remove("active");
+}
+
+function syncLabelCatalogFromTempo() {
+  google.script.run
+    .withSuccessHandler(function(attrs){
+      // Mantener "ID" manual si existe
+      var hasId = _labelCatalog.some(function(l){ return l.key === "ID"; });
+      var newCatalog = [];
+      if (hasId) {
+        newCatalog.push(_labelCatalog.find(function(l){ return l.key === "ID"; }));
+      } else {
+        newCatalog.push({ key: "ID", label: "ID", required: true, show: true, source: "manual", values: [] });
+      }
+      // Agregar atributos de Tempo
+      attrs.forEach(function(attr){
+        var existing = _labelCatalog.find(function(l){ return l.source === "tempo" && l.tempoKey === attr.key; });
+        newCatalog.push({
+          key: existing ? existing.key : attr.name,
+          label: attr.name,
+          tempoKey: attr.key,
+          required: existing ? existing.required : attr.required,
+          show: existing ? existing.show : true,
+          source: "tempo",
+          values: attr.values
+        });
+      });
+      _labelCatalog = newCatalog;
+      renderLabelCatalog();
+      toast("\u2713 " + attrs.length + " campos sincronizados desde Tempo", "success");
+    })
+    .withFailureHandler(function(e){ toast("Error: " + e.message, "error"); })
+    .fetchTempoWorkAttributes();
+}
+
+// ─── CONFIGURACIÓN: TEMPO ────────────────────────────────
+
+function loadTempoConfigUI() {
+  google.script.run.withSuccessHandler(function(tc){
+    tempoConfig = tc;
+    document.getElementById("tc-jira-server").value = tc.jira_server || "";
+    document.getElementById("tc-jira-email").value = tc.jira_email || "";
+    document.getElementById("tc-jira-token").value = tc.jira_token || "";
+    document.getElementById("tc-tempo-token").value = tc.tempo_token || "";
+    document.getElementById("tc-tempo-account").value = tc.tempo_account_id || "";
+    document.getElementById("tc-hora-inicio").value = tc.hora_inicio || 0;
+    document.getElementById("tc-hora-fin").value = tc.hora_fin || 24;
+    document.getElementById("tc-notify-email").value = tc.notify_email || "";
+    document.getElementById("tc-attr-act").value = (tc.attr && tc.attr.actividad_key) || "";
+    document.getElementById("tc-attr-fact").value = (tc.attr && tc.attr.facturable_key) || "";
+    document.getElementById("tc-attr-fact-si").value = (tc.attr && tc.attr.facturable_si) || "";
+    document.getElementById("tc-attr-fact-no").value = (tc.attr && tc.attr.facturable_no) || "";
+  }).getTempoConfig();
+}
+
+function saveTempoSettings() {
+  var tc = {
+    jira_server: document.getElementById("tc-jira-server").value.trim(),
+    jira_email: document.getElementById("tc-jira-email").value.trim(),
+    jira_token: document.getElementById("tc-jira-token").value.trim(),
+    tempo_token: document.getElementById("tc-tempo-token").value.trim(),
+    tempo_account_id: document.getElementById("tc-tempo-account").value.trim(),
+    hora_inicio: parseInt(document.getElementById("tc-hora-inicio").value),
+    hora_fin: parseInt(document.getElementById("tc-hora-fin").value),
+    notify_email: document.getElementById("tc-notify-email").value.trim(),
+    attr: {
+      actividad_key: document.getElementById("tc-attr-act").value.trim(),
+      facturable_key: document.getElementById("tc-attr-fact").value.trim(),
+      facturable_si: document.getElementById("tc-attr-fact-si").value.trim(),
+      facturable_no: document.getElementById("tc-attr-fact-no").value.trim()
+    }
+  };
+  google.script.run
+    .withSuccessHandler(function(){ toast("\u2713 Config Tempo guardada", "success"); })
+    .withFailureHandler(function(e){ toast("Error: " + e.message, "error"); })
+    .saveTempoConfig(tc);
+}
+
+function syncActividadesFromTempo() {
+  google.script.run
+    .withSuccessHandler(function(act){
+      actividades = act;
+      renderActividades();
+      toast("\u2713 " + Object.keys(act).length + " actividades sincronizadas desde Tempo", "success");
+    })
+    .withFailureHandler(function(e){ toast("Error: " + e.message, "error"); })
+    .syncActividadesFromTempo();
+}
+
+// \u2500\u2500\u2500 CONFIGURACI\u00d3N: PLANIFICADOR \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+var plannerConfig = {};
+var _spMappings = [];
+
+function loadPlannerConfigUI() {
+  google.script.run.withSuccessHandler(function(pc){
+    plannerConfig = pc;
+    document.getElementById("pc-jira-server").value = pc.jira_server || "";
+    document.getElementById("pc-jira-email").value = pc.jira_email || "";
+    document.getElementById("pc-jira-token").value = pc.jira_token || "";
+    document.getElementById("pc-project-key").value = pc.project_key || "";
+    document.getElementById("pc-cal-name").value = pc.calendar_name || "primary";
+    document.getElementById("pc-cal-id").value = pc.calendar_id || "";
+    document.getElementById("pc-event-color").value = pc.event_color || "CYAN";
+    document.getElementById("pc-guests").value = pc.guests || "";
+    document.getElementById("pc-work-start").value = pc.work_start_hour || 9;
+    document.getElementById("pc-work-end").value = pc.work_end_hour || 18;
+    document.getElementById("pc-min-block").value = pc.min_block_minutes || 30;
+    document.getElementById("pc-webhook").value = pc.webhook_url || "";
+    // Cargar SP mappings
+    var spMap = pc.sp_to_hours || {};
+    _spMappings = Object.keys(spMap).map(function(k){ return { sp: k, hours: spMap[k] }; });
+    if (_spMappings.length === 0) _spMappings = [{sp:"1",hours:2},{sp:"2",hours:4},{sp:"3",hours:16},{sp:"5",hours:32},{sp:"8",hours:40},{sp:"13",hours:80}];
+    renderSpMapping();
+  }).getPlannerConfig();
+}
+
+function renderSpMapping() {
+  var container = document.getElementById("sp-mapping");
+  var html = '<table style="width:auto;"><tr><th>SP</th><th>Horas</th><th></th></tr>';
+  _spMappings.forEach(function(m, i){
+    html += '<tr>'
+      + '<td><input type="number" value="' + m.sp + '" style="width:60px; font-size:12px;" onchange="_spMappings[' + i + '].sp=this.value"></td>'
+      + '<td><input type="number" value="' + m.hours + '" style="width:80px; font-size:12px;" onchange="_spMappings[' + i + '].hours=parseInt(this.value)"></td>'
+      + '<td><button class="btn btn-sm btn-danger" onclick="removeSpMapping(' + i + ')">\u2715</button></td>'
+      + '</tr>';
+  });
+  html += '</table>';
+  container.innerHTML = html;
+}
+
+function addSpMapping() {
+  _spMappings.push({ sp: "", hours: 0 });
+  renderSpMapping();
+}
+
+function removeSpMapping(i) {
+  _spMappings.splice(i, 1);
+  renderSpMapping();
+}
+
+function savePlannerSettings() {
+  var spMap = {};
+  _spMappings.forEach(function(m){ if (m.sp) spMap[String(m.sp)] = parseInt(m.hours) || 0; });
+  var pc = {
+    jira_server: document.getElementById("pc-jira-server").value.trim(),
+    jira_email: document.getElementById("pc-jira-email").value.trim(),
+    jira_token: document.getElementById("pc-jira-token").value.trim(),
+    project_key: document.getElementById("pc-project-key").value.trim(),
+    calendar_name: document.getElementById("pc-cal-name").value.trim() || "primary",
+    calendar_id: document.getElementById("pc-cal-id").value.trim(),
+    event_color: document.getElementById("pc-event-color").value,
+    guests: document.getElementById("pc-guests").value.trim(),
+    work_start_hour: parseInt(document.getElementById("pc-work-start").value),
+    work_end_hour: parseInt(document.getElementById("pc-work-end").value),
+    min_block_minutes: parseInt(document.getElementById("pc-min-block").value),
+    sp_to_hours: spMap,
+    webhook_url: document.getElementById("pc-webhook").value.trim()
+  };
+  google.script.run
+    .withSuccessHandler(function(){ toast("\u2713 Config Planificador guardada", "success"); })
+    .withFailureHandler(function(e){ toast("Error: " + e.message, "error"); })
+    .savePlannerConfig(pc);
+}
+</script>

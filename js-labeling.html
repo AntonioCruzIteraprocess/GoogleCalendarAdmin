@@ -1,0 +1,428 @@
+<script>
+// ─── ETIQUETADO: EJECUTAR ────────────────────────────────
+
+function runByDate() {
+  var start = document.getElementById("startDate").value;
+  var end = document.getElementById("endDate").value;
+  if (!start || !end) return toast("Selecciona ambas fechas", "error");
+  document.getElementById("results-container").innerHTML = '<div class="card" style="text-align:center; color:#666;">⏳ Procesando...</div>';
+  google.script.run.withSuccessHandler(handleResult).withFailureHandler(function(e){ toast("Error: " + e.message, "error"); }).runByDateRange(start, end);
+}
+
+function runByEvent() {
+  var query = document.getElementById("eventQuery").value.trim();
+  if (!query) return toast("Escribe algo para buscar", "error");
+  document.getElementById("results-container").innerHTML = '<div class="card" style="text-align:center; color:#666;">⏳ Buscando...</div>';
+  google.script.run.withSuccessHandler(handleResult).withFailureHandler(function(e){ toast("Error: " + e.message, "error"); }).runByEventSearch(query);
+}
+
+function handleResult(r) {
+  var labeled = (r.allEvents || []).filter(function(e){ return e.status === "labeled" || e.status === "complete"; }).length;
+  var missing = r.unmatched;
+  var html = '<div class="card"><div style="display:flex; gap:20px;">';
+  html += '<div><span style="font-size:24px; font-weight:700;">' + r.total + '</span><br><span style="font-size:12px; color:#666;">Eventos</span></div>';
+  html += '<div><span style="font-size:24px; font-weight:700; color:#34a853;">' + labeled + '</span><br><span style="font-size:12px; color:#666;">Con etiquetas</span></div>';
+  html += '<div><span style="font-size:24px; font-weight:700; color:#ea4335;">' + missing + '</span><br><span style="font-size:12px; color:#666;">Sin etiquetas</span></div>';
+  html += '</div>';
+  if (r.noRules) html += '<p style="margin-top:12px; color:#ea4335; font-size:13px;">⚠️ No hay reglas guardadas</p>';
+  html += '</div>';
+  document.getElementById("results-container").innerHTML = html;
+  renderAllEvents(r.allEvents || [], r.unmatchedEvents || []);
+}
+
+// ─── TABLA TODOS LOS EVENTOS ─────────────────────────────
+
+var _filterState = { titles: [], types: [], statuses: [], rsvps: [], labeled: [] };
+
+function renderAllEvents(allEvents, unmatchedEvents) {
+  var container = document.getElementById("unmatched-container");
+  if (allEvents.length === 0) { container.innerHTML = ""; return; }
+  window._unmatchedEvents = unmatchedEvents;
+  window._unmatchedIds = unmatchedEvents.map(function(e){ return e.id; });
+  window._unmatchedStartTimes = unmatchedEvents.map(function(e){ return e.startTime; });
+  window._allEvents = allEvents;
+
+  var titles = [];
+  allEvents.forEach(function(e){ if (titles.indexOf(e.title) === -1) titles.push(e.title); });
+  titles.sort();
+  _filterState.titles = titles.slice();
+  _filterState.types = ["allday", "timed"];
+  _filterState.statuses = ["labeled", "complete", "missing", "readonly"];
+  _filterState.rsvps = ["owner", "accepted", "maybe", "pending", "declined"];
+  _filterState.labeled = ["yes", "no"];
+
+  renderAllEventsFull();
+}
+
+function renderAllEventsFull() {
+  var container = document.getElementById("unmatched-container");
+  var filtered = getFilteredAllEvents();
+
+  var html = '<div class="card" style="margin-top:12px;"><h3 style="margin-bottom:12px;">📋 Eventos (' + filtered.length + ' de ' + window._allEvents.length + ')</h3>';
+  html += buildAllEventsFilters();
+
+  var relabelable = filtered.filter(function(e){ return e.status === "labeled" || e.status === "complete" || e.status === "missing"; }).length;
+  if (relabelable > 0) {
+    html += '<div style="margin-bottom:12px;"><button class="btn btn-warning" onclick="relabelAllVisible()">\ud83d\udd04 Re-etiquetar visibles (' + relabelable + ')</button></div>';
+  }
+
+  html += '<div style="overflow-x:auto;"><table><tr><th>T\u00edtulo</th><th>Fecha</th><th>RSVP</th><th>Regla</th><th>Status</th><th></th></tr>';
+  filtered.forEach(function(e){
+    var idx = window._allEvents.indexOf(e);
+    var rowStyle = e.status === "missing" ? ' style="background:#fff0f0;"' : '';
+    html += '<tr id="all-row-' + idx + '"' + rowStyle + '>';
+    html += '<td style="font-weight:500;">' + e.title + (e.isAllDay ? ' <span class="badge badge-gray">Todo el d\u00eda</span>' : '') + '</td>';
+    html += '<td style="white-space:nowrap;">' + e.date + '</td>';
+    html += '<td>' + getRsvpBadge(e.rsvp) + '</td>';
+    html += '<td style="font-size:11px;">' + (e.ruleName || e.labels || '') + '</td>';
+
+    if (e.status === "missing") {
+      html += '<td><span class="badge badge-red">Faltan: ' + e.missing + '</span></td>';
+    } else if (e.status === "readonly") {
+      html += '<td><span class="badge badge-yellow">Solo lectura (' + e.ruleName + ')</span></td>';
+    } else {
+      html += '<td><span class="badge badge-green">\u2713</span></td>';
+    }
+    html += '<td><button class="btn btn-sm btn-primary" onclick="openEventDetail(' + idx + ')">\u270f\ufe0f</button></td>';
+    html += '</tr>';
+  });
+  html += '</table></div></div>';
+  container.innerHTML = html;
+}
+
+function buildAllEventsFilters() {
+  var allTitles = [];
+  window._allEvents.forEach(function(e){ if (allTitles.indexOf(e.title) === -1) allTitles.push(e.title); });
+  allTitles.sort();
+
+  var html = '<div style="display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap;">';
+
+  // Filtro Titulo
+  html += '<div style="position:relative;">';
+  html += '<button class="btn btn-sm" style="background:#eee;" onclick="toggleDropdown(\'dd-title\')">T\u00edtulo \u25bc <span style="font-size:10px; color:#4285f4;">(' + _filterState.titles.length + '/' + allTitles.length + ')</span></button>';
+  html += '<div id="dd-title" class="filter-dropdown" style="display:none; position:absolute; top:32px; left:0; background:white; border:1px solid #ddd; border-radius:6px; padding:8px; z-index:50; max-height:250px; overflow-y:auto; min-width:250px; box-shadow:0 4px 12px rgba(0,0,0,0.15);">';
+  html += '<div style="margin-bottom:6px; display:flex; gap:6px;"><button class="btn btn-sm btn-primary" onclick="selectAllTitles()">Todos</button><button class="btn btn-sm" style="background:#eee;" onclick="selectNoneTitles()">Ninguno</button></div>';
+  allTitles.forEach(function(t){
+    var checked = _filterState.titles.indexOf(t) !== -1 ? ' checked' : '';
+    html += '<label style="display:flex; align-items:center; gap:6px; padding:3px 0; font-size:12px; cursor:pointer;"><input type="checkbox" class="title-check" value="' + t.replace(/"/g, '&quot;') + '"' + checked + ' onchange="updateTitleFilter()" style="width:14px; height:14px;">' + t + '</label>';
+  });
+  html += '</div></div>';
+
+  // Filtro Tipo
+  html += '<div style="position:relative;">';
+  html += '<button class="btn btn-sm" style="background:#eee;" onclick="toggleDropdown(\'dd-type\')">Tipo \u25bc <span style="font-size:10px; color:#4285f4;">(' + _filterState.types.length + '/2)</span></button>';
+  html += '<div id="dd-type" class="filter-dropdown" style="display:none; position:absolute; top:32px; left:0; background:white; border:1px solid #ddd; border-radius:6px; padding:8px; z-index:50; min-width:160px; box-shadow:0 4px 12px rgba(0,0,0,0.15);">';
+  var adChecked = _filterState.types.indexOf("allday") !== -1 ? ' checked' : '';
+  var tiChecked = _filterState.types.indexOf("timed") !== -1 ? ' checked' : '';
+  html += '<label style="display:flex; align-items:center; gap:6px; padding:4px 0; font-size:12px; cursor:pointer;"><input type="checkbox" class="type-check" value="allday"' + adChecked + ' onchange="updateTypeFilter()" style="width:14px; height:14px;">Todo el d\u00eda</label>';
+  html += '<label style="display:flex; align-items:center; gap:6px; padding:4px 0; font-size:12px; cursor:pointer;"><input type="checkbox" class="type-check" value="timed"' + tiChecked + ' onchange="updateTypeFilter()" style="width:14px; height:14px;">Con horario</label>';
+  html += '</div></div>';
+
+  // Filtro Status
+  html += '<div style="position:relative;">';
+  html += '<button class="btn btn-sm" style="background:#eee;" onclick="toggleDropdown(\'dd-status\')">Status \u25bc</button>';
+  html += '<div id="dd-status" class="filter-dropdown" style="display:none; position:absolute; top:32px; left:0; background:white; border:1px solid #ddd; border-radius:6px; padding:8px; z-index:50; min-width:180px; box-shadow:0 4px 12px rgba(0,0,0,0.15);">';
+  var stOpts = [["labeled","Etiquetado"],["complete","Completo"],["missing","Sin etiquetas"],["readonly","Solo lectura"]];
+  stOpts.forEach(function(s){
+    var checked = _filterState.statuses.indexOf(s[0]) !== -1 ? ' checked' : '';
+    html += '<label style="display:flex; align-items:center; gap:6px; padding:4px 0; font-size:12px; cursor:pointer;"><input type="checkbox" class="status-check" value="' + s[0] + '"' + checked + ' onchange="updateStatusFilter()" style="width:14px; height:14px;">' + s[1] + '</label>';
+  });
+  html += '</div></div>';
+
+  // Filtro RSVP
+  html += '<div style="position:relative;">';
+  html += '<button class="btn btn-sm" style="background:#eee;" onclick="toggleDropdown(\'dd-rsvp\')">' + 'RSVP \u25bc</button>';
+  html += '<div id="dd-rsvp" class="filter-dropdown" style="display:none; position:absolute; top:32px; left:0; background:white; border:1px solid #ddd; border-radius:6px; padding:8px; z-index:50; min-width:180px; box-shadow:0 4px 12px rgba(0,0,0,0.15);">';
+  var rsvpOpts = [["owner","Organizador"],["accepted","Aceptado"],["maybe","Quiz\u00e1"],["pending","Sin respuesta"],["declined","Rechazado"]];
+  rsvpOpts.forEach(function(s){
+    var checked = _filterState.rsvps.indexOf(s[0]) !== -1 ? ' checked' : '';
+    html += '<label style="display:flex; align-items:center; gap:6px; padding:4px 0; font-size:12px; cursor:pointer;"><input type="checkbox" class="rsvp-check" value="' + s[0] + '"' + checked + ' onchange="updateRsvpFilter()" style="width:14px; height:14px;">' + s[1] + '</label>';
+  });
+  html += '</div></div>';
+
+  // Filtro Etiqueta
+  html += '<div style="position:relative;">';
+  html += '<button class="btn btn-sm" style="background:#eee;" onclick="toggleDropdown(\'dd-labeled\')">' + 'Etiqueta \u25bc</button>';
+  html += '<div id="dd-labeled" class="filter-dropdown" style="display:none; position:absolute; top:32px; left:0; background:white; border:1px solid #ddd; border-radius:6px; padding:8px; z-index:50; min-width:160px; box-shadow:0 4px 12px rgba(0,0,0,0.15);">';
+  var lbYes = _filterState.labeled.indexOf("yes") !== -1 ? ' checked' : '';
+  var lbNo = _filterState.labeled.indexOf("no") !== -1 ? ' checked' : '';
+  html += '<label style="display:flex; align-items:center; gap:6px; padding:4px 0; font-size:12px; cursor:pointer;"><input type="checkbox" class="labeled-check" value="yes"' + lbYes + ' onchange="updateLabeledFilter()" style="width:14px; height:14px;">Con etiqueta</label>';
+  html += '<label style="display:flex; align-items:center; gap:6px; padding:4px 0; font-size:12px; cursor:pointer;"><input type="checkbox" class="labeled-check" value="no"' + lbNo + ' onchange="updateLabeledFilter()" style="width:14px; height:14px;">Sin etiqueta</label>';
+  html += '</div></div>';
+
+  html += '</div>';
+  return html;
+}
+
+function toggleDropdown(id) {
+  var dd = document.getElementById(id);
+  document.querySelectorAll(".filter-dropdown").forEach(function(el){ if (el.id !== id) el.style.display = "none"; });
+  dd.style.display = dd.style.display === "none" ? "block" : "none";
+}
+
+function selectAllTitles() {
+  var allTitles = [];
+  window._allEvents.forEach(function(e){ if (allTitles.indexOf(e.title) === -1) allTitles.push(e.title); });
+  _filterState.titles = allTitles.slice();
+  renderAllEventsFull();
+}
+function selectNoneTitles() { _filterState.titles = []; renderAllEventsFull(); }
+function updateTitleFilter() { _filterState.titles = Array.from(document.querySelectorAll(".title-check:checked")).map(function(el){ return el.value; }); renderAllEventsFull(); }
+function updateTypeFilter() { _filterState.types = Array.from(document.querySelectorAll(".type-check:checked")).map(function(el){ return el.value; }); renderAllEventsFull(); }
+function updateStatusFilter() { _filterState.statuses = Array.from(document.querySelectorAll(".status-check:checked")).map(function(el){ return el.value; }); renderAllEventsFull(); }
+function updateRsvpFilter() { _filterState.rsvps = Array.from(document.querySelectorAll(".rsvp-check:checked")).map(function(el){ return el.value; }); renderAllEventsFull(); }
+function updateLabeledFilter() { _filterState.labeled = Array.from(document.querySelectorAll(".labeled-check:checked")).map(function(el){ return el.value; }); renderAllEventsFull(); }
+
+function getRsvpBadge(rsvp) {
+  switch(rsvp) {
+    case "accepted": return '<span class="badge badge-green">Aceptado</span>';
+    case "declined": return '<span class="badge badge-red">Rechazado</span>';
+    case "maybe": return '<span class="badge badge-yellow">Quiz\u00e1</span>';
+    case "pending": return '<span class="badge badge-gray">Sin respuesta</span>';
+    default: return '<span class="badge badge-blue">Organizador</span>';
+  }
+}
+
+function relabelAllVisible() {
+  var filtered = getFilteredAllEvents();
+  var toRelabel = filtered.filter(function(e){ return e.status === "labeled" || e.status === "complete" || e.status === "missing"; });
+  if (!toRelabel.length) return toast("No hay eventos para re-etiquetar", "error");
+  if (!confirm("\u00bfRe-etiquetar " + toRelabel.length + " eventos visibles con sus reglas correspondientes?")) return;
+  var ids = toRelabel.map(function(e){ return { id: e.id, startTime: e.startTime }; });
+  google.script.run
+    .withSuccessHandler(function(r){
+      toast("\u2713 " + r.updated + " re-etiquetados" + (r.errors > 0 ? ", " + r.errors + " errores" : ""), r.errors > 0 ? "warning" : "success");
+    })
+    .withFailureHandler(function(e){ toast("Error: " + e.message, "error"); })
+    .relabelEvents(ids);
+}
+
+function getFilteredAllEvents() {
+  return window._allEvents.filter(function(e){
+    var matchTitle = _filterState.titles.indexOf(e.title) !== -1;
+    var matchType = (_filterState.types.indexOf("allday") !== -1 && e.isAllDay) || (_filterState.types.indexOf("timed") !== -1 && !e.isAllDay);
+    var matchStatus = _filterState.statuses.indexOf(e.status) !== -1;
+    var matchRsvp = _filterState.rsvps.indexOf(e.rsvp) !== -1;
+    var hasLabel = e.status === "labeled" || e.status === "complete";
+    var matchLabeled = (_filterState.labeled.indexOf("yes") !== -1 && hasLabel) || (_filterState.labeled.indexOf("no") !== -1 && !hasLabel);
+    return matchTitle && matchType && matchStatus && matchRsvp && matchLabeled;
+  });
+}
+
+// ─── MODAL DETALLE DE EVENTO ─────────────────────────────
+
+function openEventDetail(idx) {
+  var e = window._allEvents[idx];
+  window._editingEventIdx = idx;
+  var ruleOptions = rules.map(function(r, i){ return '<option value="' + i + '">' + r.name + '</option>'; }).join("");
+
+  var html = '<div class="modal-title">' + e.title + '</div>';
+  html += '<div style="margin-bottom:12px;">';
+  html += '<p style="font-size:13px; color:#666; margin-bottom:4px;"><strong>Fecha:</strong> ' + e.date + '</p>';
+  html += '<p style="font-size:13px; color:#666; margin-bottom:4px;"><strong>Invitados:</strong> ' + (e.guests || 'Ninguno') + '</p>';
+  html += '</div>';
+  html += '<div style="margin-bottom:12px;"><label>Descripci\u00f3n</label>';
+  html += '<div style="background:#f8f9fa; border:1px solid #e0e0e0; border-radius:6px; padding:12px; font-size:12px; max-height:200px; overflow-y:auto; white-space:pre-wrap;">' + (e.description || '<em style="color:#aaa;">Sin descripci\u00f3n</em>') + '</div></div>';
+  html += '<div style="margin-bottom:12px;"><label>Status</label><br>';
+  if (e.status === "missing") {
+    html += '<span class="badge badge-red">Faltan: ' + e.missing + '</span>';
+  } else if (e.status === "readonly") {
+    html += '<span class="badge badge-yellow">Solo lectura (' + e.ruleName + ')</span>';
+  } else if (e.status === "labeled") {
+    html += '<span class="badge badge-green">Etiquetado (' + e.ruleName + ')</span>';
+  } else {
+    html += '<span class="badge badge-green">Completo</span>';
+  }
+  html += '</div>';
+  html += '<div style="border-top:1px solid #eee; padding-top:12px; margin-top:12px;">';
+  html += '<label>Aplicar / Re-etiquetar con regla:</label>';
+  html += '<div class="form-row" style="margin-top:6px;"><div style="flex:2;"><select id="event-detail-rule" style="width:100%;"><option value="">-- Seleccionar regla --</option>' + ruleOptions + '</select></div>';
+  html += '<div style="flex:0;"><button class="btn btn-success" onclick="applyRuleFromDetail()">Etiquetar</button></div></div>';
+  html += '</div>';
+
+  document.getElementById("event-detail-content").innerHTML = html;
+  document.getElementById("event-detail-modal").classList.add("active");
+}
+
+function closeEventDetail() {
+  document.getElementById("event-detail-modal").classList.remove("active");
+}
+
+function applyRuleFromDetail() {
+  var idx = window._editingEventIdx;
+  var e = window._allEvents[idx];
+  var select = document.getElementById("event-detail-rule");
+  var ruleIndex = parseInt(select.value);
+  if (isNaN(ruleIndex)) return toast("Selecciona una regla", "error");
+  google.script.run
+    .withSuccessHandler(function(r){
+      if (r.success) {
+        var row = document.getElementById("all-row-" + idx);
+        if (row) row.style.background = "#e6f4ea";
+        toast("\u2713 " + (r.note ? 'Ya etiquetado' : 'Re-etiquetado') + ": " + r.title + " (" + r.rule + ")", "success");
+        closeEventDetail();
+      } else { toast("Error: " + r.error, "error"); }
+    })
+    .withFailureHandler(function(e){ toast("Error: " + e.message, "error"); })
+    .applyRuleToEvent(e.id, ruleIndex, e.startTime);
+}
+
+// ─── APLICAR REGLA ───────────────────────────────────────
+
+function applyRule(rowIdx) {
+  var eventId = window._unmatchedIds[rowIdx];
+  var startTime = window._unmatchedStartTimes[rowIdx];
+  var select = document.getElementById("rule-select-" + rowIdx);
+  var ruleIndex = parseInt(select.value);
+  if (isNaN(ruleIndex)) return toast("Selecciona una regla", "error");
+  google.script.run
+    .withSuccessHandler(function(r){
+      if (r.success) {
+        var row = document.getElementById("row-" + rowIdx);
+        if (row) { row.style.background = "#e6f4ea"; row.querySelector("td:last-child").innerHTML = '<span style="color:#137333;">\u2713 ' + r.rule + '</span>'; }
+        toast("Etiquetado: " + r.title, "success");
+      } else { toast("Error: " + r.error, "error"); }
+    })
+    .withFailureHandler(function(e){ toast("Error: " + e.message, "error"); })
+    .applyRuleToEvent(eventId, ruleIndex, startTime);
+}
+
+// ─── ETIQUETADO: REGLAS ──────────────────────────────────
+
+var CONDITION_TYPES = [
+  ["domain", "Dominio del invitado"],
+  ["creatorDomain", "Dominio del creador"],
+  ["emailContains", "Email contiene"],
+  ["titleContains", "T\u00edtulo contiene"],
+  ["titleNotContains", "T\u00edtulo NO contiene"],
+  ["descriptionContains", "Descripci\u00f3n contiene"],
+  ["isAllDay", "Es todo el d\u00eda"],
+  ["minGuests", "M\u00edn. invitados"]
+];
+
+function renderRulesList() {
+  var container = document.getElementById("rules-list");
+  if (rules.length === 0) { container.innerHTML = '<div class="card" style="text-align:center; color:#888;">No hay reglas. Crea una nueva.</div>'; return; }
+  container.innerHTML = rules.map(function(rule, i){
+    var groups = rule.conditionGroups || [{operator:"AND", conditions: rule.conditions || []}];
+    var groupsHtml = groups.map(function(g){ return g.conditions.map(function(c){ return '<span class="badge badge-blue">' + c.type + ': ' + c.value + '</span>'; }).join(' <small>' + g.operator + '</small> '); }).join(' <span class="badge badge-gray">OR</span> ');
+    return '<div class="card rule-card ' + (rule.enabled ? '' : 'disabled') + '"><div class="rule-header"><div>'
+      + '<span class="rule-name">' + rule.name + '</span> '
+      + '<span class="badge ' + (rule.enabled ? 'badge-green' : 'badge-gray') + '">' + (rule.enabled ? 'Activa' : 'Inactiva') + '</span>'
+      + '<div class="rule-meta" style="margin-top:6px;">' + groupsHtml + '</div>'
+      + '<div class="rule-meta" style="margin-top:4px;">\u2192 ' + rule.labels.map(function(l){ return l.key + ": " + l.value; }).join(", ") + '</div>'
+      + '</div><div style="display:flex; gap:6px;">'
+      + '<button class="btn btn-sm" style="background:#eee;" onclick="toggleRule(' + i + ')">' + (rule.enabled ? '\u23f8\ufe0f' : '\u25b6\ufe0f') + '</button>'
+      + '<button class="btn btn-sm btn-primary" onclick="openRuleModal(' + i + ')">\u270f\ufe0f</button>'
+      + '<button class="btn btn-sm btn-danger" onclick="deleteRule(' + i + ')">\ud83d\uddd1\ufe0f</button>'
+      + '</div></div></div>';
+  }).join("");
+}
+
+function toggleRule(i) { rules[i].enabled = !rules[i].enabled; persistConfig(); renderRulesList(); }
+function deleteRule(i) { if (!confirm('\u00bfEliminar "' + rules[i].name + '"?')) return; rules.splice(i, 1); persistConfig(); renderRulesList(); }
+
+function openRuleModal(index) {
+  editingRuleIndex = index;
+  var catalog = (config.labelCatalog || []).filter(function(l){ return l.show; });
+  if (!catalog.length) catalog = [{key:"ID",required:true,show:true,values:[]},{key:"Tipo",required:true,show:true,values:[]},{key:"Actividad",required:true,show:true,values:[]}];
+  if (index >= 0) {
+    var rule = rules[index];
+    document.getElementById("rule-name").value = rule.name;
+    modalGroups = rule.conditionGroups ? JSON.parse(JSON.stringify(rule.conditionGroups)) : [{ operator: "AND", conditions: JSON.parse(JSON.stringify(rule.conditions || [])) }];
+    modalLabels = JSON.parse(JSON.stringify(rule.labels));
+    document.getElementById("modal-title").textContent = "Editar regla";
+  } else {
+    document.getElementById("rule-name").value = "";
+    modalGroups = [{ operator: "AND", conditions: [{ type: "domain", value: "" }] }];
+    modalLabels = catalog.filter(function(l){ return l.required && l.key; }).map(function(l){ return { key: l.key, value: "" }; });
+    document.getElementById("modal-title").textContent = "Nueva regla";
+  }
+  renderModalGroups();
+  renderModalLabels();
+  document.getElementById("rule-modal").classList.add("active");
+}
+
+function closeModal() { document.getElementById("rule-modal").classList.remove("active"); }
+
+function renderModalGroups() {
+  var container = document.getElementById("modal-conditions");
+  var html = modalGroups.map(function(group, gi){
+    var typesOpts = function(selected){ return CONDITION_TYPES.map(function(t){ return '<option value="' + t[0] + '"' + (t[0]===selected?' selected':'') + '>' + t[1] + '</option>'; }).join(""); };
+    var conds = group.conditions.map(function(c, ci){
+      return '<div class="form-row"><div style="flex:1;"><select onchange="modalGroups[' + gi + '].conditions[' + ci + '].type=this.value" style="width:100%;">' + typesOpts(c.type) + '</select></div>'
+        + '<div style="flex:2;"><input type="text" value="' + c.value + '" placeholder="Valor" onchange="modalGroups[' + gi + '].conditions[' + ci + '].value=this.value"></div>'
+        + '<div style="flex:0;"><button class="btn btn-sm btn-danger" onclick="removeConditionFromGroup(' + gi + ',' + ci + ')">\u2715</button></div></div>';
+    }).join("");
+    var removeBtn = modalGroups.length > 1 ? '<button class="btn btn-sm btn-danger" onclick="removeGroup(' + gi + ')">\u2715</button>' : '';
+    return '<div style="background:#f8f9fa; border-radius:6px; padding:12px; margin-bottom:10px; border:1px solid #e0e0e0;">'
+      + '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"><div style="display:flex; align-items:center; gap:8px;">'
+      + '<span style="font-size:12px; font-weight:600; color:#555;">Grupo ' + (gi+1) + '</span>'
+      + '<select onchange="modalGroups[' + gi + '].operator=this.value" style="width:auto; font-size:12px; padding:4px 8px;"><option value="AND"' + (group.operator==="AND"?" selected":"") + '>AND (todas)</option><option value="OR"' + (group.operator==="OR"?" selected":"") + '>OR (alguna)</option></select>'
+      + '</div><div style="display:flex; gap:4px;"><button class="btn btn-sm btn-primary" onclick="addConditionToGroup(' + gi + ')">+ Condici\u00f3n</button>' + removeBtn + '</div></div>'
+      + conds + '</div>'
+      + (gi < modalGroups.length - 1 ? '<div style="text-align:center; margin:-4px 0 6px; font-size:12px; color:#888; font-weight:600;">\u2014 OR \u2014</div>' : '');
+  }).join("");
+  container.innerHTML = html + '<button class="btn btn-sm" style="background:#eee; margin-top:4px;" onclick="addGroup()">+ Agregar grupo OR</button>';
+}
+
+function addGroup() { modalGroups.push({ operator: "AND", conditions: [{ type: "domain", value: "" }] }); renderModalGroups(); }
+function removeGroup(gi) { modalGroups.splice(gi, 1); renderModalGroups(); }
+function addConditionToGroup(gi) { modalGroups[gi].conditions.push({ type: "domain", value: "" }); renderModalGroups(); }
+function removeConditionFromGroup(gi, ci) { modalGroups[gi].conditions.splice(ci, 1); if(modalGroups[gi].conditions.length===0) modalGroups.splice(gi,1); renderModalGroups(); }
+
+function renderModalLabels() {
+  var catalog = (config.labelCatalog || []).filter(function(l){ return l.show; });
+  if (!catalog.length) catalog = [{key:"ID",required:true,show:true,values:[]},{key:"Tipo",required:true,show:true,values:[]},{key:"Actividad",required:true,show:true,values:[]}];
+  var catalogOptions = catalog.map(function(l){ return '<option value="' + l.key + '">' + (l.label || l.key) + (l.required ? ' *' : '') + '</option>'; }).join("");
+
+  document.getElementById("modal-labels").innerHTML = modalLabels.map(function(l, j){
+    var catItem = catalog.find(function(c){ return c.key === l.key; });
+    var isRequired = catItem && catItem.required;
+    var hasValues = catItem && catItem.values && catItem.values.length;
+
+    // Key selector
+    var keyHtml = '<select onchange="modalLabels[' + j + '].key=this.value; modalLabels[' + j + '].value=\'\'; renderModalLabels();" style="width:100%;"><option value="">-- Etiqueta --</option>' + catalogOptions.replace('value="' + l.key + '"', 'value="' + l.key + '" selected') + '</select>';
+
+    // Value: dropdown si tiene valores posibles, input si es texto libre
+    var valueHtml;
+    if (hasValues) {
+      var valOpts = catItem.values.map(function(v){ return '<option value="' + v.name + '"' + (v.name === l.value || v.value === l.value ? ' selected' : '') + '>' + v.name + '</option>'; }).join("");
+      valueHtml = '<select onchange="modalLabels[' + j + '].value=this.value" style="width:100%;"><option value="">-- Valor --</option>' + valOpts + '</select>';
+    } else {
+      valueHtml = '<input type="text" value="' + (l.value || '') + '" placeholder="Valor" onchange="modalLabels[' + j + '].value=this.value">';
+    }
+
+    var deleteBtn = isRequired ? '<span style="color:#888; font-size:11px;">*</span>' : '<button class="btn btn-sm btn-danger" onclick="modalLabels.splice(' + j + ',1);renderModalLabels()">\u2715</button>';
+
+    return '<div class="form-row"><div style="flex:1;">' + keyHtml + '</div><div style="flex:2;">' + valueHtml + '</div><div style="flex:0;">' + deleteBtn + '</div></div>';
+  }).join("");
+}
+
+function addModalLabel() {
+  var catalog = (config.labelCatalog || []).filter(function(l){ return l.show; });
+  var usedKeys = modalLabels.map(function(l){ return l.key; });
+  var available = catalog.filter(function(l){ return l.key && usedKeys.indexOf(l.key) === -1; });
+  modalLabels.push({ key: available.length ? available[0].key : "", value: "" });
+  renderModalLabels();
+}
+
+function saveRule() {
+  var name = document.getElementById("rule-name").value.trim();
+  if (!name) return toast("Ponle un nombre a la regla", "error");
+  // Traducir UUIDs a nombres visibles del cat\u00e1logo
+  var catalog = (config.labelCatalog || []).filter(function(l){ return l.show; });
+  modalLabels.forEach(function(ml) {
+    var catItem = catalog.find(function(c){ return c.key === ml.key; });
+    if (catItem && catItem.values && catItem.values.length) {
+      var match = catItem.values.find(function(v){ return v.value === ml.value; });
+      if (match) ml.value = match.name;
+    }
+  });
+  var rule = { name: name, enabled: true, conditionGroups: modalGroups, labels: modalLabels };
+  if (editingRuleIndex >= 0) { rule.enabled = rules[editingRuleIndex].enabled; rules[editingRuleIndex] = rule; }
+  else { rules.push(rule); }
+  persistConfig(); renderRulesList(); closeModal();
+  toast("\u2713 Regla guardada", "success");
+}
+</script>

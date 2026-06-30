@@ -1,0 +1,63 @@
+<script>
+// ─── STATE ───────────────────────────────────────────────
+let rules = [];
+let config = {};
+let editingRuleIndex = -1;
+let modalGroups = [];
+let modalLabels = [];
+let tempoConfig = {};
+let actividades = {};
+
+// ─── INIT ────────────────────────────────────────────────
+const today = new Date();
+const weekAgo = new Date(today.getTime() - 7 * 86400000);
+document.getElementById("startDate").value = weekAgo.toISOString().split("T")[0];
+document.getElementById("endDate").value = today.toISOString().split("T")[0];
+
+google.script.run.withSuccessHandler(c => {
+  config = c;
+  rules = c.rules || [];
+  document.getElementById("daysBack").value = c.daysBack || 7;
+  document.getElementById("daysForward").value = c.daysForward || 30;
+  document.getElementById("searchDaysBack").value = c.searchDaysBack || 90;
+  document.getElementById("searchDaysForward").value = c.searchDaysForward || 365;
+  document.getElementById("webhookUrl").value = c.webhookUrl || "";
+  document.getElementById("webhookEnabled").checked = c.webhookEnabled !== false;
+  renderRulesList();
+}).getConfig();
+
+// ─── NAVIGATION ──────────────────────────────────────────
+function showPage(page) {
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+  document.getElementById("page-" + page).classList.add("active");
+  event.target.classList.add("active");
+  if (page === "settings") { loadTriggers(); loadCalendars(); loadTempoConfigUI(); loadPlannerConfigUI(); loadExtractorConfigUI(); loadActividadesUI(); loadLabelCatalog(); }
+  if (page === "extractor") loadExtractorConfigUI();
+}
+
+function switchTab(page, tab) {
+  const container = document.getElementById("page-" + page);
+  container.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  container.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  document.getElementById(page + "-" + tab).classList.add("active");
+  event.target.classList.add("active");
+}
+
+// ─── TOAST ───────────────────────────────────────────────
+function toast(msg, type) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.className = "toast " + type;
+  setTimeout(() => el.className = "toast", 4000);
+}
+
+// ─── PERSIST ─────────────────────────────────────────────
+function persistConfig() {
+  config.rules = rules;
+  google.script.run
+    .withSuccessHandler(() => toast("✓ Guardado", "success"))
+    .withFailureHandler(e => toast("Error: " + e.message, "error"))
+    .saveConfig(config);
+}
+</script>

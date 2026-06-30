@@ -1,0 +1,123 @@
+<script>
+// ─── RESUMEN EJECUTIVO ───────────────────────────────────
+
+var _dashDateRange = { min: "", max: "" };
+var _dashData = null;
+
+function loadDashboard() {
+  var dateFrom = document.getElementById("dashDateFrom").value;
+  var dateTo = document.getElementById("dashDateTo").value;
+
+  if (!dateFrom || !dateTo) {
+    document.getElementById("resumen-loading").style.display = "block";
+    document.getElementById("resumen-loading").innerHTML = '<p style="color:#888; text-align:center;">Selecciona un rango de fechas y haz clic en Cargar.</p>';
+    return;
+  }
+
+  document.getElementById("resumen-loading").style.display = "block";
+  document.getElementById("resumen-loading").innerHTML = '<div style="text-align:center; padding:20px;"><div style="display:inline-block; width:40px; height:40px; border:4px solid #e0e0e0; border-top:4px solid #4285f4; border-radius:50%; animation:spin 1s linear infinite;"></div><p style="color:#666; margin-top:12px;">Cargando indicadores...</p></div>';
+  document.getElementById("resumen-kpis").style.display = "none";
+  document.getElementById("resumen-content").innerHTML = "";
+
+  google.script.run
+    .withSuccessHandler(function(data){
+      if (!data || !data.kpis) {
+        document.getElementById("resumen-loading").innerHTML = '<p style="color:#888; text-align:center;">Sin datos para el rango seleccionado.</p>';
+        return;
+      }
+      if (data.filtered === 0) {
+        document.getElementById("resumen-loading").innerHTML = '<p style="color:#888; text-align:center;">Sin datos para el rango seleccionado (0 de ' + data.total + ' registros).</p>';
+        return;
+      }
+      document.getElementById("resumen-loading").style.display = "none";
+      document.getElementById("resumen-kpis").style.display = "grid";
+
+      if (data.dateRange) _dashDateRange = data.dateRange;
+      _dashData = data;
+      renderKPIs(data);
+    })
+    .withFailureHandler(function(e){
+      document.getElementById("resumen-loading").innerHTML = '<p style="color:#ea4335; text-align:center;">Error: ' + e.message + '</p>';
+      document.getElementById("resumen-loading").style.display = "block";
+    })
+    .getResumenEjecutivo(dateFrom, dateTo);
+}
+
+function applyDashFilters() {
+  loadDashboard();
+}
+
+function resetDashFilters() {
+  document.getElementById("dashDateFrom").value = _dashDateRange.min || "";
+  document.getElementById("dashDateTo").value = _dashDateRange.max || "";
+  loadDashboard();
+}
+
+function renderKPIs(data) {
+  var kpis = data.kpis;
+  var html = '';
+
+  html += buildKpiCard("totalActividades", kpis.totalActividades, "Total Actividades", "Tareas realizadas", "blue",
+    "Incidencias donde Tipo \u2260 Epic y Story Points > 0. Filtrado: " + data.filtered + " de " + data.total + " registros.");
+
+  html += buildKpiCard("spPromedio", kpis.spPromedioSemana, "Story Points", "Promedio Semanal", "green",
+    "Suma SP (" + kpis.sumaSP + ") \u00f7 Semanas (" + kpis.semanas + ")");
+
+  html += buildKpiCard("pctCerradas", kpis.pctCerradas + "%", "% Tareas Cerradas", "del total de actividades", "purple",
+    "Finalizadas (" + kpis.tareasFinalizadas + ") \u00f7 Total (" + kpis.totalActividades + ")");
+
+  html += buildKpiCard("epicasEntregadas", kpis.epicasFinalizadas, "Requerimientos Entregados", "\u00e9picas completadas", "green",
+    "Tipo = Epic y Estado = Finalizada");
+
+  html += buildKpiCard("pendientes", kpis.tareasPendientes, "Tareas Pendientes", "tareas sin terminar", "orange",
+    "Actividades con Estado \u2260 Finalizada y SP > 0");
+
+  html += buildKpiCard("cumplimiento", kpis.pctCumplimiento + "%", "Cumplimiento", "Entrega en tiempo", "green",
+    "En tiempo (" + kpis.enTiempo + ") \u00f7 Total (" + kpis.totalActividades + ")");
+
+  document.getElementById("resumen-kpis").innerHTML = html;
+}
+
+function buildKpiCard(id, value, header, footer, color, tooltipText) {
+  return '<div class="kpi-card ' + color + '" onclick="showKpiDetail(\'' + id + '\')">'
+    + '<div class="kpi-tooltip" onclick="event.stopPropagation()">\u2139\ufe0f<div class="kpi-tooltip-text">' + tooltipText + '</div></div>'
+    + '<div class="kpi-header">' + header + '</div>'
+    + '<div class="kpi-value">' + value + '</div>'
+    + '<div class="kpi-footer">' + footer + '</div>'
+    + '</div>';
+}
+
+function showKpiDetail(kpiId) {
+  var dateFrom = document.getElementById("dashDateFrom").value;
+  var dateTo = document.getElementById("dashDateTo").value;
+
+  document.getElementById("resumen-content").innerHTML = '<div class="card" style="text-align:center; color:#666;"><div style="display:inline-block; width:24px; height:24px; border:3px solid #e0e0e0; border-top:3px solid #4285f4; border-radius:50%; animation:spin 1s linear infinite;"></div> Cargando detalle...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(rows){
+      if (!rows || rows.length === 0) {
+        document.getElementById("resumen-content").innerHTML = '<div class="card"><p style="color:#888;">Sin registros para este indicador.</p></div>';
+        return;
+      }
+      var html = '<div class="card">';
+      html += '<h3 style="margin-bottom:8px;">Detalle (' + rows.length + ' registros)</h3>';
+      html += '<div style="max-height:400px; overflow-y:auto;"><table><tr><th>Clave</th><th>Resumen</th><th>SP</th><th>Estado</th><th>Due Date</th><th>Original Due</th></tr>';
+      rows.forEach(function(r){
+        html += '<tr><td style="font-size:12px;">' + r.clave + '</td><td style="font-size:12px;">' + r.resumen + '</td><td>' + (r.sp || '-') + '</td><td style="font-size:12px;">' + r.estado + '</td><td style="font-size:12px;">' + r.dueDate + '</td><td style="font-size:12px;">' + r.originalDue + '</td></tr>';
+      });
+      html += '</table></div></div>';
+      document.getElementById("resumen-content").innerHTML = html;
+    })
+    .withFailureHandler(function(e){
+      document.getElementById("resumen-content").innerHTML = '<div class="card"><p style="color:#ea4335;">Error: ' + e.message + '</p></div>';
+    })
+    .getKpiDetail(kpiId, dateFrom, dateTo);
+}
+
+// NO carga autom\u00e1ticamente
+google.script.run.withSuccessHandler(function(config){
+  if (!config.spreadsheet_id) {
+    document.getElementById("resumen-loading").innerHTML = '<p style="color:#888; text-align:center;">Configura el Spreadsheet ID en \u2699\ufe0f Configuraci\u00f3n.</p>';
+  }
+}).getDashboardConfig();
+</script>

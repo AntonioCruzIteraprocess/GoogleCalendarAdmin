@@ -1,0 +1,253 @@
+<script>
+// ─── TEMPO: STATE ────────────────────────────────────────
+var _previewItems = [];
+
+// ─── TEMPO: PREVIEW & SYNC ──────────────────────────────
+function tempoPreview() {
+  var from = document.getElementById("tempoSyncFrom").value;
+  var to = document.getElementById("tempoSyncTo").value;
+  if (!from || !to) return toast("Selecciona ambas fechas", "error");
+  document.getElementById("tempo-preview").innerHTML = '<p style="color:#666; text-align:center;">⏳ Generando preview...</p>';
+  google.script.run
+    .withSuccessHandler(renderPreview)
+    .withFailureHandler(function(e){ document.getElementById("tempo-preview").innerHTML = ""; toast("Error: " + e.message, "error"); })
+    .tempoPreviewRange(from, to);
+}
+
+function renderPreview(items) {
+  _previewItems = items;
+  if (!items.length) { document.getElementById("tempo-preview").innerHTML = '<div class="card">No hay eventos en el rango.</div>'; return; }
+
+  var pending = items.filter(function(i){ return i.status === "pending"; }).length;
+  var overlap = items.filter(function(i){ return i.status === "overlap"; }).length;
+  var duplicate = items.filter(function(i){ return i.status === "duplicate"; }).length;
+  var errors = items.filter(function(i){ return i.status === "error"; }).length;
+
+  var html = '<div class="card" style="margin-top:12px;">';
+  // Resumen
+  html += '<div style="display:flex; gap:20px; margin-bottom:12px; align-items:center;">';
+  html += '<div><span style="font-size:20px; font-weight:700;">' + items.length + '</span><br><span style="font-size:12px; color:#666;">Total</span></div>';
+  html += '<div><span style="font-size:20px; font-weight:700; color:#34a853;">' + pending + '</span><br><span style="font-size:12px; color:#666;">Pendientes</span></div>';
+  html += '<div><span style="font-size:20px; font-weight:700; color:#fbbc04;">' + overlap + '</span><br><span style="font-size:12px; color:#666;">Encimados</span></div>';
+  html += '<div><span style="font-size:20px; font-weight:700; color:#4285f4;">' + duplicate + '</span><br><span style="font-size:12px; color:#666;">Duplicados</span></div>';
+  html += '<div><span style="font-size:20px; font-weight:700; color:#ea4335;">' + errors + '</span><br><span style="font-size:12px; color:#666;">Errores</span></div>';
+  // Tooltip leyenda
+  html += '<div style="margin-left:auto; position:relative;"><button class="btn btn-sm" style="background:#eee; font-size:16px;" onclick="toggleDropdown(\'tempo-legend\')" title="Leyenda">\u2139\ufe0f</button>';
+  html += '<div id="tempo-legend" class="filter-dropdown" style="display:none; position:absolute; top:32px; right:0; background:white; border:1px solid #ddd; border-radius:6px; padding:12px; z-index:50; min-width:280px; box-shadow:0 4px 12px rgba(0,0,0,0.15); font-size:12px;">';
+  html += '<p style="margin-bottom:6px;"><strong>Estados:</strong></p>';
+  html += '<p>\ud83d\udfe2 <strong>Pendiente</strong> \u2014 no existe en Tempo, sin encimamiento</p>';
+  html += '<p>\ud83d\udfe1 <strong>Encimado</strong> \u2014 se traslapa con algo existente</p>';
+  html += '<p>\ud83d\udd35 <strong>Duplicado</strong> \u2014 ya existe exactamente igual en Tempo</p>';
+  html += '<p>\ud83d\udd34 <strong>Error</strong> \u2014 faltan campos o sin sub-issue</p>';
+  html += '</div></div>';
+  html += '</div>';
+
+  // Botones de acción
+  html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
+  if (pending + overlap > 0) html += '<button class="btn btn-success" onclick="tempoUploadAllBtn()">⬆\ufe0f Cargar todo (' + (pending + overlap) + ')</button>';
+  if (pending > 0) html += '<button class="btn btn-primary" onclick="tempoUploadPendingOnly()">Cargar faltantes (' + pending + ')</button>';
+  html += '<button class="btn btn-warning" onclick="tempoUploadSelected()">Cargar seleccionados</button>';
+  html += '<button class="btn btn-danger" onclick="tempoDeleteAndReloadBtn()">Borrar y recargar</button>';
+  html += '</div>';
+
+  // Grid
+  html += '<div style="overflow-x:auto;"><table><tr><th><input type="checkbox" id="tempo-check-all" onchange="tempoToggleAll(this.checked)"></th><th>Fecha</th><th>Hora</th><th>\u00c9pica</th><th>Subtarea</th><th>Descripci\u00f3n</th><th>Duraci\u00f3n</th><th>Status</th></tr>';
+  items.forEach(function(item, idx) {
+    var rowStyle = '';
+    if (item.status === "error") rowStyle = ' style="background:#fff0f0;"';
+    else if (item.status === "overlap") rowStyle = ' style="background:#fff8e1;"';
+    else if (item.status === "duplicate") rowStyle = ' style="background:#e8f0fe;"';
+    html += '<tr' + rowStyle + '>';
+    var canCheck = item.status !== "error";
+    html += '<td>' + (canCheck ? '<input type="checkbox" class="tempo-item-check" data-idx="' + idx + '">' : '') + '</td>';
+    html += '<td style="white-space:nowrap;">' + item.date + '</td>';
+    html += '<td>' + (item.start || '') + '</td>';
+    html += '<td style="font-size:12px;">' + (item.epicName || item.epicKey || '') + '</td>';
+    html += '<td style="font-size:12px;">' + (item.issueSummary || '') + '</td>';
+    html += '<td style="font-size:12px;">' + item.summary + '</td>';
+    html += '<td style="font-weight:500;">' + item.duration + '</td>';
+    html += '<td>' + getTempoStatusBadge(item) + '</td>';
+    html += '</tr>';
+  });
+  html += '</table></div></div>';
+  document.getElementById("tempo-preview").innerHTML = html;
+}
+
+function getTempoStatusBadge(item) {
+  switch(item.status) {
+    case "pending": return '<span class="badge badge-green">Pendiente</span>';
+    case "overlap": return '<span class="badge badge-yellow">Encimado</span>';
+    case "duplicate": return '<span class="badge badge-blue">Duplicado</span>';
+    case "error": return '<span class="badge badge-red" title="' + (item.error || '') + '">Error</span>';
+    default: return '';
+  }
+}
+
+function tempoToggleAll(checked) {
+  document.querySelectorAll(".tempo-item-check").forEach(function(el){ el.checked = checked; });
+}
+
+function toggleDropdown(id) {
+  var dd = document.getElementById(id);
+  dd.style.display = dd.style.display === "none" ? "block" : "none";
+}
+
+// ─── ACCIONES DE CARGA ───────────────────────────────────
+
+function tempoUploadAllBtn() {
+  var loadable = _previewItems.filter(function(i){ return i.status === "pending" || i.status === "overlap"; });
+  if (!loadable.length) return toast("No hay items para cargar", "error");
+  if (!confirm("\u00bfCargar " + loadable.length + " worklogs (pendientes + encimados)?")) return;
+  google.script.run
+    .withSuccessHandler(function(r){ toast("\u2713 " + r.uploaded + " cargados" + (r.errors.length ? ", " + r.errors.length + " errores" : ""), "success"); tempoPreview(); })
+    .withFailureHandler(function(e){ toast("Error: " + e.message, "error"); })
+    .tempoUploadAll(loadable);
+}
+
+function tempoUploadPendingOnly() {
+  var pending = _previewItems.filter(function(i){ return i.status === "pending"; });
+  if (!pending.length) return toast("No hay faltantes", "error");
+  if (!confirm("\u00bfCargar " + pending.length + " worklogs (solo faltantes, sin encimamientos)?")) return;
+  google.script.run
+    .withSuccessHandler(function(r){ toast("\u2713 " + r.uploaded + " cargados", "success"); tempoPreview(); })
+    .withFailureHandler(function(e){ toast("Error: " + e.message, "error"); })
+    .tempoUploadAll(pending);
+}
+
+function tempoUploadSelected() {
+  var checks = document.querySelectorAll(".tempo-item-check:checked");
+  if (!checks.length) return toast("Selecciona al menos un item", "error");
+  var selected = [];
+  checks.forEach(function(el){ selected.push(_previewItems[parseInt(el.getAttribute("data-idx"))]); });
+  if (!confirm("\u00bfCargar " + selected.length + " worklogs seleccionados?")) return;
+  google.script.run
+    .withSuccessHandler(function(r){ toast("\u2713 " + r.uploaded + " cargados", "success"); tempoPreview(); })
+    .withFailureHandler(function(e){ toast("Error: " + e.message, "error"); })
+    .tempoUploadAll(selected);
+}
+
+function tempoDeleteAndReloadBtn() {
+  var from = document.getElementById("tempoSyncFrom").value;
+  var to = document.getElementById("tempoSyncTo").value;
+  if (!confirm("\u00bfBorrar TODOS los worklogs del " + from + " al " + to + " y recargar desde calendario?")) return;
+  document.getElementById("tempo-preview").innerHTML = '<p style="color:#666; text-align:center;">\u23f3 Borrando y recargando...</p>';
+  google.script.run
+    .withSuccessHandler(function(r){
+      toast("\u2713 " + r.deleted + " borrados, " + r.uploaded + " cargados", "success");
+      tempoPreview();
+    })
+    .withFailureHandler(function(e){ toast("Error: " + e.message, "error"); tempoPreview(); })
+    .tempoDeleteAndReload(from, to);
+}
+
+// ─── TEMPO: BORRAR ───────────────────────────────────────
+function tempoDeleteRangeUI() {
+  var from = document.getElementById("tempoDeleteFrom").value;
+  var to = document.getElementById("tempoDeleteTo").value;
+  if (!from || !to) return toast("Selecciona ambas fechas", "error");
+  if (!confirm("\u00bfBorrar TODOS los worklogs del " + from + " al " + to + "?")) return;
+  document.getElementById("tempo-delete-results").innerHTML = '<p style="color:#666; text-align:center;">\u23f3 Borrando...</p>';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      document.getElementById("tempo-delete-results").innerHTML = '<div class="card" style="margin-top:12px;"><span style="font-size:20px; font-weight:700; color:#ea4335;">' + r.deleted + '</span> de ' + r.total + ' worklogs borrados.</div>';
+      toast("\u2713 " + r.deleted + " worklogs borrados", "success");
+    })
+    .withFailureHandler(function(e) { document.getElementById("tempo-delete-results").innerHTML = ""; toast("Error: " + e.message, "error"); })
+    .tempoDeleteRange(from, to);
+}
+
+// ─── TEMPO: CONSULTAR ────────────────────────────────────
+var _worklogItems = [];
+
+function viewWorklogs() {
+  var from = document.getElementById("tempoViewFrom").value;
+  var to = document.getElementById("tempoViewTo").value;
+  if (!from || !to) return toast("Selecciona ambas fechas", "error");
+  document.getElementById("tempo-worklogs").innerHTML = '<p style="color:#666; text-align:center;">\u23f3 Consultando...</p>';
+  google.script.run
+    .withSuccessHandler(renderWorklogs)
+    .withFailureHandler(function(e){ document.getElementById("tempo-worklogs").innerHTML = ''; toast("Error: " + e.message, "error"); })
+    .getTempoWorklogsForUI(from, to);
+}
+
+function renderWorklogs(r) {
+  _worklogItems = r.items;
+  var html = '<div style="display:flex; gap:20px; margin:12px 0; align-items:center;">';
+  html += '<div><span style="font-size:20px; font-weight:700;">' + r.count + '</span><br><span style="font-size:12px; color:#666;">Worklogs</span></div>';
+  html += '<div><span style="font-size:20px; font-weight:700; color:#4285f4;">' + r.totalDuration + '</span><br><span style="font-size:12px; color:#666;">Total</span></div>';
+  if (r.count > 0) {
+    html += '<div style="margin-left:auto;"><button class="btn btn-danger" onclick="deleteAllWorklogs()">\ud83d\uddd1\ufe0f Eliminar todos (' + r.count + ')</button></div>';
+  }
+  html += '</div>';
+  if (r.items.length > 0) {
+    html += '<table><tr><th>Fecha</th><th>Issue</th><th>\u00c9pica</th><th>Subtarea</th><th>Descripci\u00f3n</th><th>Duraci\u00f3n</th><th></th></tr>';
+    r.items.forEach(function(w, idx){
+      html += '<tr id="wl-row-' + idx + '"><td style="white-space:nowrap;">' + w.date + '</td>';
+      html += '<td><span class="badge badge-blue">' + w.issue + '</span></td>';
+      html += '<td style="font-size:12px;">' + (w.epicName || '') + '</td>';
+      html += '<td style="font-size:12px;">' + (w.issueSummary || '') + '</td>';
+      html += '<td style="font-size:12px;">' + w.description + '</td>';
+      html += '<td style="font-weight:500;">' + w.duration + '</td>';
+      html += '<td><button class="btn btn-sm btn-danger" onclick="deleteSingleWorklog(' + idx + ')">\u2715</button></td></tr>';
+    });
+    html += '</table>';
+  }
+  document.getElementById("tempo-worklogs").innerHTML = html;
+}
+
+function deleteSingleWorklog(idx) {
+  var item = _worklogItems[idx];
+  if (!item) return;
+  if (!confirm("\u00bfEliminar worklog \"" + item.description + "\" del " + item.date + "?")) return;
+  google.script.run
+    .withSuccessHandler(function() {
+      _worklogItems.splice(idx, 1);
+      var totalSec = _worklogItems.reduce(function(s, w){ return s + w.seconds; }, 0);
+      var tH = Math.floor(totalSec / 3600), tM = Math.floor((totalSec % 3600) / 60);
+      renderWorklogs({ count: _worklogItems.length, totalDuration: tH + "h " + tM + "m", items: _worklogItems });
+      toast("\u2713 Worklog eliminado", "success");
+    })
+    .withFailureHandler(function(e) { toast("Error: " + e.message, "error"); })
+    .tempoDeleteSingle(item.id);
+}
+
+function deleteAllWorklogs() {
+  var from = document.getElementById("tempoViewFrom").value;
+  var to = document.getElementById("tempoViewTo").value;
+  if (!confirm("\u00bfEliminar TODOS los " + _worklogItems.length + " worklogs del " + from + " al " + to + "?")) return;
+  google.script.run
+    .withSuccessHandler(function(r) {
+      renderWorklogs({ count: 0, totalDuration: "0h 0m", items: [] });
+      toast("\u2713 " + r.deleted + " worklogs eliminados", "success");
+    })
+    .withFailureHandler(function(e) { toast("Error: " + e.message, "error"); })
+    .tempoDeleteRange(from, to);
+}
+
+// ─── TEMPO: ACTIVIDADES ──────────────────────────────────
+function loadActividadesUI() {
+  google.script.run.withSuccessHandler(function(act){ actividades = act; renderActividades(); }).getActividades();
+}
+
+function renderActividades() {
+  var container = document.getElementById("actividades-list");
+  var entries = Object.entries(actividades);
+  if (entries.length === 0) { container.innerHTML = '<p style="color:#888;">No hay actividades.</p>'; return; }
+  var rows = entries.map(function(entry, i){
+    var key = entry[0], val = entry[1];
+    return '<tr><td><input type="text" value="' + key + '" style="font-size:12px;" onchange="updateActKey(' + i + ', this.value)"></td>'
+      + '<td><input type="text" value="' + val.nombre + '" style="font-size:12px;" onchange="actividades[Object.keys(actividades)[' + i + ']].nombre=this.value"></td>'
+      + '<td><input type="text" value="' + val.codigo + '" style="font-size:12px; width:80px;" onchange="actividades[Object.keys(actividades)[' + i + ']].codigo=this.value"></td>'
+      + '<td><button class="btn btn-sm btn-danger" onclick="deleteActividad(' + i + ')">\u2715</button></td></tr>';
+  }).join("");
+  container.innerHTML = '<table><tr><th>Clave</th><th>Nombre</th><th>C\u00f3digo</th><th></th></tr>' + rows + '</table>';
+}
+
+function addActividad() { actividades["NuevaClave"] = { nombre: "Nueva actividad", codigo: "NEW" }; renderActividades(); }
+function deleteActividad(i) { var keys = Object.keys(actividades); delete actividades[keys[i]]; renderActividades(); }
+function updateActKey(i, newKey) { var keys = Object.keys(actividades); var old = keys[i]; var val = actividades[old]; delete actividades[old]; actividades[newKey] = val; }
+
+function saveActividadesUI() {
+  google.script.run.withSuccessHandler(function(){ toast("\u2713 Actividades guardadas", "success"); }).withFailureHandler(function(e){ toast("Error: " + e.message, "error"); }).saveActividades(actividades);
+}
+</script>

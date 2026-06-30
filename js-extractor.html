@@ -1,0 +1,350 @@
+<script>
+// ─── REPORTE PROVIDENT ───────────────────────────────────
+
+var _extPreviewData = [];
+var _extPreviewFields = [];
+var _extSavedFilters = [];
+var _extFieldFilters = [];
+
+var EXT_OPERATORS = [
+  ["=", "Igual a"],
+  ["!=", "Diferente de"],
+  ["~", "Contiene"],
+  ["!~", "No contiene"],
+  ["in", "En (lista)"],
+  ["not in", "No en (lista)"],
+  ["is", "Es (EMPTY/NULL)"],
+  ["is not", "No es (EMPTY/NULL)"],
+  [">", "Mayor que"],
+  ["<", "Menor que"],
+  [">=", "Mayor o igual"],
+  ["<=", "Menor o igual"]
+];
+
+// Mapeo de campos configurados a JQL field names
+var EXT_JQL_MAP = {
+  "key": "key",
+  "summary": "summary",
+  "issuetype": "issuetype",
+  "status": "status",
+  "priority": "priority",
+  "reporter": "reporter",
+  "created": "created",
+  "updated": "updated",
+  "resolutiondate": "resolved",
+  "duedate": "duedate",
+  "labels": "labels",
+  "description": "description",
+  "parent.key": "parent"
+};
+
+function getJqlFieldName(fieldId) {
+  if (EXT_JQL_MAP[fieldId]) return EXT_JQL_MAP[fieldId];
+  if (fieldId.startsWith("customfield_")) return "cf[" + fieldId.replace("customfield_", "") + "]";
+  return fieldId;
+}
+
+function loadExtractorConfigUI() {
+  google.script.run.withSuccessHandler(function(ec){
+    document.getElementById("ext-jira-server").value = ec.jira_server || "";
+    document.getElementById("ext-jira-email").value = ec.jira_email || "";
+    document.getElementById("ext-jira-token").value = ec.jira_token || "";
+    document.getElementById("ext-project-key").value = ec.project_key || "";
+    document.getElementById("ext-spreadsheet-id").value = ec.spreadsheet_id || "";
+    document.getElementById("ext-sheet-name").value = ec.sheet_name || "Reporte";
+    document.getElementById("ext-write-mode").value = ec.write_mode || "upsert";
+    _extSelectedFields = ec.fields || [];
+    if (_extSelectedFields.length > 0) renderSelectedFields();
+  }).getExtractorConfig();
+  loadSavedFilters();
+}
+
+function loadSavedFilters() {
+  google.script.run.withSuccessHandler(function(filters){
+    _extSavedFilters = filters;
+    var select = document.getElementById("extSavedFilter");
+    select.innerHTML = '<option value="">-- Nuevo filtro --</option>';
+    filters.forEach(function(f, i){
+      select.innerHTML += '<option value="' + i + '">' + f.name + '</option>';
+    });
+  }).getExtractorFilters();
+}
+
+function loadSavedFilter() {
+  var idx = document.getElementById("extSavedFilter").value;
+  if (idx === "") { _extFieldFilters = []; renderFieldFilters(); return; }
+  var filter = _extSavedFilters[parseInt(idx)];
+  if (!filter) return;
+  document.getElementById("extFilterType").value = filter.data.filterType || "duedate";
+  document.getElementById("extDateFrom").value = filter.data.dateFrom || "";
+  document.getElementById("extDateTo").value = filter.data.dateTo || "";
+  _extFieldFilters = filter.data.fieldFilters || [];
+  renderFieldFilters();
+}
+
+function saveCurrentFilter() {
+  var name = prompt("Nombre para este filtro:");
+  if (!name) return;
+  var filterData = {
+    filterType: document.getElementById("extFilterType").value,
+    dateFrom: document.getElementById("extDateFrom").value,
+    dateTo: document.getElementById("extDateTo").value,
+    fieldFilters: _extFieldFilters
+  };
+  google.script.run
+    .withSuccessHandler(function(){ toast("\u2713 Filtro guardado", "success"); loadSavedFilters(); })
+    .withFailureHandler(function(e){ toast("Error: " + e.message, "error"); })
+    .saveExtractorFilter(name, filterData);
+}
+
+function deleteSavedFilter() {
+  var idx = document.getElementById("extSavedFilter").value;
+  if (idx === "") return toast("Selecciona un filtro para eliminar", "error");
+  var filter = _extSavedFilters[parseInt(idx)];
+  if (!confirm("\u00bfEliminar filtro \"" + filter.name + "\"?")) return;
+  google.script.run
+    .withSuccessHandler(function(){ toast("\u2713 Filtro eliminado", "success"); loadSavedFilters(); })
+    .withFailureHandler(function(e){ toast("Error: " + e.message, "error"); })
+    .deleteExtractorFilter(filter.name);
+}
+
+// ─── CONSTRUCTOR DE FILTROS POR CAMPO ────────────────────
+
+function getConfiguredFields() {
+  if (_extSelectedFields && _extSelectedFields.length > 0) return _extSelectedFields;
+  return EXT_DEFAULT_FIELD_IDS.map(function(id){ return { id: id, name: id }; });
+}
+
+function addFieldFilter() {
+  _extFieldFilters.push({ field: "", operator: "=", value: "" });
+  renderFieldFilters();
+}
+
+function removeFieldFilter(idx) {
+  _extFieldFilters.splice(idx, 1);
+  renderFieldFilters();
+}
+
+function renderFieldFilters() {
+  var container = document.getElementById("ext-field-filters");
+  if (_extFieldFilters.length === 0) {
+    container.innerHTML = '<p style="font-size:12px; color:#888;">Sin filtros adicionales.</p>';
+    return;
+  }
+
+  var fields = getConfiguredFields();
+  var fieldOpts = fields.map(function(f){ return '<option value="' + f.id + '">' + f.name + '</option>'; }).join("");
+  var opOpts = EXT_OPERATORS.map(function(o){ return '<option value="' + o[0] + '">' + o[1] + '</option>'; }).join("");
+
+  container.innerHTML = _extFieldFilters.map(function(ff, i){
+    var selField = '<select onchange="_extFieldFilters[' + i + '].field=this.value" style="font-size:12px;"><option value="">-- Campo --</option>' + fieldOpts + '</select>';
+    var selOp = '<select onchange="_extFieldFilters[' + i + '].operator=this.value" style="font-size:12px; width:auto;">' + opOpts + '</select>';
+
+    // Seleccionar valores actuales
+    selField = selField.replace('value="' + ff.field + '"', 'value="' + ff.field + '" selected');
+    selOp = selOp.replace('value="' + ff.operator + '"', 'value="' + ff.operator + '" selected');
+
+    return '<div class="form-row">'
+      + '<div style="flex:2;">' + selField + '</div>'
+      + '<div style="flex:1;">' + selOp + '</div>'
+      + '<div style="flex:2;"><input type="text" value="' + (ff.value || '') + '" placeholder="Valor" onchange="_extFieldFilters[' + i + '].value=this.value" style="font-size:12px;"></div>'
+      + '<div style="flex:0;"><button class="btn btn-sm btn-danger" onclick="removeFieldFilter(' + i + ')">✕</button></div>'
+      + '</div>';
+  }).join("");
+}
+
+function buildExtraJql() {
+  if (_extFieldFilters.length === 0) return "";
+  var parts = _extFieldFilters.filter(function(ff){ return ff.field && ff.value; }).map(function(ff){
+    var jqlField = getJqlFieldName(ff.field);
+    var val = ff.value;
+    // Para operadores in/not in, el valor ya debe tener paréntesis
+    if (ff.operator === "in" || ff.operator === "not in") {
+      if (val.indexOf("(") === -1) val = "(" + val + ")";
+      return jqlField + " " + ff.operator + " " + val;
+    }
+    // Para is/is not
+    if (ff.operator === "is" || ff.operator === "is not") {
+      return jqlField + " " + ff.operator + " " + val;
+    }
+    // Para ~ y !~ (contiene)
+    if (ff.operator === "~" || ff.operator === "!~") {
+      return jqlField + " " + ff.operator + ' "' + val + '"';
+    }
+    // Resto: usar comillas si no es numérico
+    if (isNaN(val)) {
+      return jqlField + " " + ff.operator + ' "' + val + '"';
+    }
+    return jqlField + " " + ff.operator + " " + val;
+  });
+  return parts.join(" AND ");
+}
+
+// ─── CAMPOS CONFIG ───────────────────────────────────────
+
+var EXT_DEFAULT_FIELD_IDS = [
+  "summary", "key", "id", "issuetype", "status", "priority", "reporter",
+  "created", "updated", "lastViewed", "resolutiondate", "duedate", "labels",
+  "description", "customfield_10033", "customfield_10049", "customfield_10015",
+  "customfield_10030", "comment", "parent", "parent.key", "parent.summary"
+];
+
+var _extJiraFields = [];
+var _extSelectedFields = [];
+
+function loadJiraFields() {
+  document.getElementById("ext-fields-list").innerHTML = '<p style="color:#666;">\u23f3 Cargando campos de Jira...</p>';
+  google.script.run
+    .withSuccessHandler(function(fields){
+      _extJiraFields = [
+        { id: "key", name: "Clave de incidencia", custom: false },
+        { id: "id", name: "ID de la incidencia", custom: false },
+        { id: "parent.key", name: "Clave principal", custom: false },
+        { id: "parent.summary", name: "Parent summary", custom: false }
+      ].concat(fields);
+      renderFieldSelector();
+      toast("\u2713 " + fields.length + " campos cargados", "success");
+    })
+    .withFailureHandler(function(e){ document.getElementById("ext-fields-list").innerHTML = ''; toast("Error: " + e.message, "error"); })
+    .getJiraFields();
+}
+
+function renderFieldSelector() {
+  var container = document.getElementById("ext-fields-list");
+  var selectedIds = _extSelectedFields.length > 0 ? _extSelectedFields.map(function(f){ return f.id; }) : EXT_DEFAULT_FIELD_IDS;
+
+  var html = '<div style="margin-bottom:8px; display:flex; gap:6px;">';
+  html += '<button class="btn btn-sm btn-primary" onclick="extFieldsDefault()">Default (22)</button>';
+  html += '<button class="btn btn-sm" style="background:#eee;" onclick="extFieldsNone()">Ninguno</button>';
+  html += '<input type="text" id="ext-field-search" placeholder="Buscar campo..." oninput="filterFieldList()" style="font-size:12px; max-width:200px;">';
+  html += '</div>';
+  html += '<div id="ext-fields-checks" style="max-height:300px; overflow-y:auto; border:1px solid #eee; border-radius:6px; padding:8px;">';
+  _extJiraFields.forEach(function(f){
+    var checked = selectedIds.indexOf(f.id) !== -1 ? " checked" : "";
+    var badge = f.custom ? ' <span style="font-size:9px; color:#888;">(custom)</span>' : '';
+    html += '<label class="ext-field-label" style="display:flex; align-items:center; gap:6px; padding:3px 0; font-size:12px; cursor:pointer;" data-name="' + f.name.toLowerCase() + '">';
+    html += '<input type="checkbox" class="ext-field-check" value="' + f.id + '" data-name="' + f.name.replace(/"/g, '&quot;') + '"' + checked + ' style="width:14px; height:14px;">';
+    html += f.name + badge + '</label>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderSelectedFields() {
+  var container = document.getElementById("ext-fields-list");
+  if (_extSelectedFields.length === 0) {
+    container.innerHTML = '<p style="color:#888; font-size:13px;">No hay campos configurados. Carga los campos de Jira.</p>';
+    return;
+  }
+  var html = '<p style="font-size:12px; color:#666; margin-bottom:8px;">' + _extSelectedFields.length + ' campos seleccionados. Usa "Cargar campos de Jira" para modificar.</p>';
+  html += '<div style="display:flex; flex-wrap:wrap; gap:4px;">';
+  _extSelectedFields.forEach(function(f){ html += '<span class="badge badge-blue">' + f.name + '</span>'; });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function filterFieldList() {
+  var search = document.getElementById("ext-field-search").value.toLowerCase();
+  document.querySelectorAll(".ext-field-label").forEach(function(label){
+    label.style.display = (!search || label.getAttribute("data-name").indexOf(search) !== -1) ? "flex" : "none";
+  });
+}
+
+function extFieldsDefault() {
+  document.querySelectorAll(".ext-field-check").forEach(function(el){ el.checked = EXT_DEFAULT_FIELD_IDS.indexOf(el.value) !== -1; });
+}
+
+function extFieldsNone() {
+  document.querySelectorAll(".ext-field-check").forEach(function(el){ el.checked = false; });
+}
+
+function saveExtConfig() {
+  var fields = Array.from(document.querySelectorAll(".ext-field-check:checked")).map(function(el){ return { id: el.value, name: el.getAttribute("data-name") }; });
+  if (fields.length === 0) fields = _extSelectedFields;
+  var config = {
+    jira_server: document.getElementById("ext-jira-server").value.trim(),
+    jira_email: document.getElementById("ext-jira-email").value.trim(),
+    jira_token: document.getElementById("ext-jira-token").value.trim(),
+    project_key: document.getElementById("ext-project-key").value.trim(),
+    spreadsheet_id: document.getElementById("ext-spreadsheet-id").value.trim(),
+    sheet_name: document.getElementById("ext-sheet-name").value.trim() || "Reporte",
+    write_mode: document.getElementById("ext-write-mode").value,
+    fields: fields,
+    saved_filters: _extSavedFilters
+  };
+  _extSelectedFields = fields;
+  google.script.run
+    .withSuccessHandler(function(){ toast("\u2713 Config Reporte guardada", "success"); })
+    .withFailureHandler(function(e){ toast("Error: " + e.message, "error"); })
+    .saveExtractorConfig(config);
+}
+
+// ─── PREVIEW Y EXTRACCIÓN ────────────────────────────────
+
+function getExtFilters() {
+  return {
+    filterType: document.getElementById("extFilterType").value,
+    dateFrom: document.getElementById("extDateFrom").value,
+    dateTo: document.getElementById("extDateTo").value,
+    extraJql: buildExtraJql()
+  };
+}
+
+function extPreview() {
+  var f = getExtFilters();
+  if (!f.dateFrom || !f.dateTo) return toast("Selecciona ambas fechas", "error");
+  document.getElementById("ext-results").innerHTML = '<div class="card" style="text-align:center; color:#666;">\u23f3 Consultando Jira...</div>';
+  google.script.run
+    .withSuccessHandler(function(r){
+      if (r.status === "empty") { document.getElementById("ext-results").innerHTML = '<div class="card">' + r.message + '</div>'; return; }
+      _extPreviewData = r.preview;
+      _extPreviewFields = r.fields;
+      renderExtPreview();
+    })
+    .withFailureHandler(function(e){ document.getElementById("ext-results").innerHTML = ''; toast("Error: " + e.message, "error"); })
+    .previewExtraction(f.filterType, f.dateFrom, f.dateTo, f.extraJql);
+}
+
+function renderExtPreview() {
+  var data = _extPreviewData;
+  var fields = _extPreviewFields;
+
+  var html = '<div class="card">';
+  html += '<div style="margin-bottom:12px;"><span style="font-size:20px; font-weight:700;">' + data.length + '</span> incidencias encontradas</div>';
+  html += '<div style="overflow-x:auto;"><table><tr>';
+  fields.forEach(function(f){ html += '<th style="white-space:nowrap;">' + f.name + '</th>'; });
+  html += '</tr>';
+  data.forEach(function(row){
+    html += '<tr>';
+    fields.forEach(function(f){
+      var val = row[f.id] || '-';
+      if (typeof val === 'string' && val.length > 60) val = val.substring(0, 60) + '...';
+      html += '<td style="font-size:12px; white-space:nowrap;">' + val + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</table></div></div>';
+  document.getElementById("ext-results").innerHTML = html;
+}
+
+function extRun() {
+  var f = getExtFilters();
+  if (!f.dateFrom || !f.dateTo) return toast("Selecciona ambas fechas", "error");
+  if (!confirm("\u00bfExtraer datos y guardar en el Spreadsheet?")) return;
+  document.getElementById("ext-results").innerHTML = '<div class="card" style="text-align:center; color:#666;">\u23f3 Extrayendo y guardando...</div>';
+  google.script.run
+    .withSuccessHandler(function(r){
+      if (r.status === "empty") { document.getElementById("ext-results").innerHTML = '<div class="card">' + r.message + '</div>'; return; }
+      var html = '<div class="card"><div style="display:flex; gap:20px;">';
+      html += '<div><span style="font-size:24px; font-weight:700;">' + r.found + '</span><br><span style="font-size:12px; color:#666;">Encontradas</span></div>';
+      html += '<div><span style="font-size:24px; font-weight:700; color:#34a853;">' + r.inserted + '</span><br><span style="font-size:12px; color:#666;">Nuevas</span></div>';
+      html += '<div><span style="font-size:24px; font-weight:700; color:#4285f4;">' + r.updated + '</span><br><span style="font-size:12px; color:#666;">Actualizadas</span></div>';
+      if (r.skipped > 0) html += '<div><span style="font-size:24px; font-weight:700; color:#666;">' + r.skipped + '</span><br><span style="font-size:12px; color:#666;">Omitidas</span></div>';
+      html += '</div></div>';
+      document.getElementById("ext-results").innerHTML = html;
+      toast("\u2713 " + r.inserted + " insertadas, " + r.updated + " actualizadas", "success");
+    })
+    .withFailureHandler(function(e){ document.getElementById("ext-results").innerHTML = ''; toast("Error: " + e.message, "error"); })
+    .runExtraction(f.filterType, f.dateFrom, f.dateTo, f.extraJql);
+}
+</script>

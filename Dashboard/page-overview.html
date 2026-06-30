@@ -1,0 +1,19 @@
+<div id="page-overview" class="page active">
+  <h1 class="page-title">📈 Resumen Ejecutivo</h1>
+
+  <!-- Filtros globales -->
+  <div class="card" id="resumen-filters">
+    <div class="form-row" style="align-items:center;">
+      <div><label>Desde</label><input type="date" id="dashDateFrom"></div>
+      <div><label>Hasta</label><input type="date" id="dashDateTo"></div>
+      <div style="flex:0;"><label>&nbsp;</label><button class="btn btn-primary" onclick="loadDashboard()">Cargar</button></div>
+      <div style="flex:0;"><label>&nbsp;</label><button class="btn btn-sm" style="background:#eee;" onclick="resetDashFilters()">Reset</button></div>
+    </div>
+  </div>
+
+  <div id="resumen-loading" class="card" style="text-align:center; color:#888;">
+    Selecciona un rango de fechas y haz clic en Cargar.
+  </div>
+  <div id="resumen-kpis" class="kpi-grid" style="display:none;"></div>
+  <div id="resumen-content"></div>
+</div>

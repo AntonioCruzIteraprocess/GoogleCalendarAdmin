@@ -1,0 +1,26 @@
+<div id="page-planner" class="page">
+  <h1 class="page-title">📋 Planificador</h1>
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('planner','ejecutar')">Ejecutar</div>
+  </div>
+
+  <div id="planner-ejecutar" class="tab-panel active">
+    <div class="card">
+      <p style="font-size:13px; color:#666; margin-bottom:16px;">Sincroniza tareas de Jira al calendario basándose en story points y slots libres.</p>
+      <div class="form-row">
+        <div><label>Desde</label><input type="date" id="plannerFrom"></div>
+        <div><label>Hasta</label><input type="date" id="plannerTo"></div>
+      </div>
+      <div class="form-row">
+        <div><label>Hora inicio</label><input type="number" id="plannerHourFrom" value="9" min="0" max="23" style="width:80px;"></div>
+        <div><label>Hora fin</label><input type="number" id="plannerHourTo" value="18" min="0" max="23" style="width:80px;"></div>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:12px;">
+        <button class="btn btn-warning" onclick="plannerSimulateUI()">🔍 Simular</button>
+        <button class="btn btn-success" onclick="plannerSyncUI()">▶️ Sincronizar</button>
+        <button class="btn btn-danger btn-sm" onclick="plannerCleanUI()" style="margin-left:auto;">🗑️ Limpiar eventos</button>
+      </div>
+    </div>
+    <div id="planner-results"></div>
+  </div>
+</div>

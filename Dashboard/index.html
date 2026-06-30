@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <?!= include('css') ?>
+</head>
+<body>
+  <div class="sidebar">
+    <h2>📊 Dashboard</h2>
+    <button class="nav-item active" onclick="showPage('overview')">📈 Resumen Ejecutivo</button>
+    <button class="nav-item" onclick="showPage('detail')">📋 Detalle</button>
+    <button class="nav-item" onclick="showPage('epics')">🎯 Épicas</button>
+    <button class="nav-item" onclick="showPage('settings')">⚙️ Configuración</button>
+  </div>
+
+  <div class="main">
+    <?!= include('page-overview') ?>
+    <?!= include('page-detail') ?>
+    <?!= include('page-epics') ?>
+    <?!= include('page-settings') ?>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <?!= include('js-core') ?>
+  <?!= include('js-overview') ?>
+  <?!= include('js-settings') ?>
+</body>
+</html>

@@ -1,0 +1,40 @@
+<script>
+// ─── SETTINGS ────────────────────────────────────────────
+
+function loadDashSettings() {
+  google.script.run.withSuccessHandler(function(config){
+    document.getElementById("dash-spreadsheet-id").value = config.spreadsheet_id || "";
+    document.getElementById("dash-sheet-name").value = config.sheet_name || "Reporte";
+  }).withFailureHandler(function(e){
+    toast("Error cargando config: " + e.message, "error");
+  }).getDashboardConfig();
+}
+
+function saveDashConfig() {
+  var spreadId = document.getElementById("dash-spreadsheet-id").value.trim();
+  var sheetName = document.getElementById("dash-sheet-name").value.trim() || "Reporte";
+
+  if (!spreadId) return toast("Ingresa el Spreadsheet ID", "error");
+
+  var config = {
+    spreadsheet_id: spreadId,
+    sheet_name: sheetName
+  };
+
+  google.script.run
+    .withSuccessHandler(function(result){
+      if (result && result.success) {
+        toast("\u2713 Configuraci\u00f3n guardada", "success");
+      } else {
+        toast("Error: respuesta inesperada", "error");
+      }
+    })
+    .withFailureHandler(function(e){
+      toast("Error al guardar: " + e.message, "error");
+    })
+    .saveDashboardConfig(config);
+}
+
+// Cargar config al iniciar
+loadDashSettings();
+</script>

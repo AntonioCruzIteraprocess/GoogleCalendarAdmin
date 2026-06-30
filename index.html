@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <?!= include('css') ?>
+</head>
+<body>
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <h2>📅 Calendar Manager</h2>
+    <button class="nav-item active" onclick="showPage('labeling')">🏷️ Etiquetado</button>
+    <button class="nav-item" onclick="showPage('tempo')">⏱️ Tempo</button>
+    <button class="nav-item" onclick="showPage('planner')">📋 Planificador</button>
+    <button class="nav-item" onclick="showPage('extractor')">📊 Reporte Provident</button>
+    <button class="nav-item" onclick="showPage('settings')">⚙️ Configuración</button>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <?!= include('page-labeling') ?>
+    <?!= include('page-tempo') ?>
+    <?!= include('page-planner') ?>
+    <?!= include('page-extractor') ?>
+    <?!= include('page-settings') ?>
+  </div>
+
+  <!-- Modal -->
+  <?!= include('modal-rule') ?>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <!-- Scripts -->
+  <?!= include('js-core') ?>
+  <?!= include('js-labeling') ?>
+  <?!= include('js-tempo') ?>
+  <?!= include('js-planner') ?>
+  <?!= include('js-extractor') ?>
+  <?!= include('js-settings') ?>
+</body>
+</html>
